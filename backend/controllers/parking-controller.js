@@ -1,5 +1,6 @@
 const parkingRepository = require("../repositories/parking-repository");
 const recommendationService = require("../services/recommendation-service");
+const searchService = require("../services/search-service");
 const bookingService = require("../services/booking-service");
 const { json, readBody } = require("../utils/http");
 
@@ -7,6 +8,11 @@ function listSpots(req, res) {
   return json(res, 200, {
     spots: parkingRepository.listSpots()
   });
+}
+
+async function searchSpots(req, res, url) {
+  const result = await searchService.searchParking(url.searchParams);
+  return json(res, 200, result);
 }
 
 function listOrders(req, res) {
@@ -30,6 +36,7 @@ async function createBooking(req, res) {
 
 module.exports = {
   listSpots,
+  searchSpots,
   listOrders,
   recommend,
   createBooking

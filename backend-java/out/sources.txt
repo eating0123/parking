@@ -14,5 +14,6 @@
 /Users/wangxiaoxi07/builder_c005/parking/backend-java/src/main/java/com/citypilot/parking/services/OwnerService.java
 /Users/wangxiaoxi07/builder_c005/parking/backend-java/src/main/java/com/citypilot/parking/services/PricingService.java
 /Users/wangxiaoxi07/builder_c005/parking/backend-java/src/main/java/com/citypilot/parking/services/RecommendationService.java
+/Users/wangxiaoxi07/builder_c005/parking/backend-java/src/main/java/com/citypilot/parking/services/SearchService.java
 /Users/wangxiaoxi07/builder_c005/parking/backend-java/src/main/java/com/citypilot/parking/utils/BackendLog.java
 /Users/wangxiaoxi07/builder_c005/parking/backend-java/src/main/java/com/citypilot/parking/utils/JsonUtil.java

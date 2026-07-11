@@ -36,6 +36,9 @@ public class StaticFileHandler implements HttpHandler {
         if (path.startsWith("/parking-images/")) {
             path = "/frontend" + path;
         }
+        if ("/amap-parking.js".equals(path)) {
+            path = "/frontend/amap-parking.js";
+        }
         Path file = root.resolve(path.substring(1)).normalize();
 
         if (!isAllowed(file) || !Files.exists(file) || Files.isDirectory(file)) {
