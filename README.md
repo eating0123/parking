@@ -32,6 +32,15 @@ http://localhost:3000
 - `POST /api/owner/spots`：新增共享车位
 - `GET /api/orders`：我的订单
 
+## Cloudflare Pages 部署
+
+仓库已提供 `functions/api/[[path]].js`，用于在 Cloudflare Pages Functions 中承接主业务接口。Pages 项目建议配置：
+
+- Build output directory：`frontend`
+- Functions directory：`functions`
+
+重新部署后，前端可直接同域访问 `/api/spots`、`/api/orders`、`/api/recommend`、`/api/bookings`、`/api/owner` 等接口。
+
 ## 后端分层
 
 - `backend-java/src/main/java/com/citypilot/parking/CityPilotApplication.java`：Java 服务启动、API 路由挂载、静态文件托管。

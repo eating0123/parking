@@ -1,0 +1,401 @@
+const spots = [
+  {
+    id: 1,
+    name: "枣园北里 12号院",
+    addr: "兴华大街三段 · 小区内部地面车位",
+    type: "community",
+    badge: "居委会认证",
+    rate: 3,
+    cap: 15,
+    window: "19:00-次日8:00",
+    dist: "280m",
+    walk: "4分钟",
+    count: 4,
+    ev: false,
+    monthly: 168,
+    x: 28,
+    y: 43,
+    noSlope: true,
+    size: "standard",
+    covered: false,
+    elevator: true,
+    code: "ZY-B07",
+    rule: "夜间封顶 ¥15，白天需在 8:00 前驶离",
+    occupancy: 72
+  },
+  {
+    id: 2,
+    name: "大兴荟聚 P2",
+    addr: "欣宁街 15 号 · 商场地下车库 P2 层",
+    type: "mall",
+    badge: "商场认证",
+    rate: 2,
+    cap: 12,
+    window: "22:00-次日9:00",
+    dist: "450m",
+    walk: "6分钟",
+    count: 23,
+    ev: true,
+    monthly: 168,
+    x: 57,
+    y: 29,
+    noSlope: true,
+    size: "large",
+    covered: true,
+    elevator: true,
+    code: "P2-089",
+    rule: "车牌识别自动抬杆，P2 有 8 个充电位",
+    occupancy: 54
+  },
+  {
+    id: 3,
+    name: "魏师傅的车位",
+    addr: "高米店南 3 栋 102 · 产权私家车位",
+    type: "personal",
+    badge: "个人车位",
+    rate: 4,
+    cap: 0,
+    window: "08:00-18:00",
+    dist: "190m",
+    walk: "3分钟",
+    count: 1,
+    ev: false,
+    monthly: 0,
+    x: 43,
+    y: 56,
+    noSlope: false,
+    size: "standard",
+    covered: false,
+    elevator: false,
+    code: "WSF-01",
+    rule: "车主白天上班出借，18:00 前须驶离",
+    occupancy: 31
+  },
+  {
+    id: 4,
+    name: "生物医药基地 P1",
+    addr: "永大路 38 号 · 企业错峰车位",
+    type: "enterprise",
+    badge: "企业认证",
+    rate: 2.5,
+    cap: 14,
+    window: "19:00-次日8:30",
+    dist: "620m",
+    walk: "9分钟",
+    count: 15,
+    ev: true,
+    monthly: 198,
+    x: 73,
+    y: 61,
+    noSlope: true,
+    size: "bus",
+    covered: true,
+    elevator: false,
+    code: "BIO-A12",
+    rule: "需从东门闸机进入，凭订单码抬杆",
+    occupancy: 46
+  },
+  {
+    id: 5,
+    name: "黄村西里 5号院",
+    addr: "兴丰大街 · 老旧小区免费共享位",
+    type: "community",
+    badge: "居委会认证",
+    rate: 0,
+    cap: 0,
+    window: "19:00-次日8:00",
+    dist: "350m",
+    walk: "5分钟",
+    count: 2,
+    ev: false,
+    monthly: 0,
+    x: 22,
+    y: 68,
+    noSlope: true,
+    size: "large",
+    covered: false,
+    elevator: true,
+    code: "HC-05",
+    rule: "老旧小区夜间免费共享，需按时驶离",
+    occupancy: 83
+  },
+  {
+    id: 6,
+    name: "政务中心地下车库",
+    addr: "永华路 · 政务中心 B1",
+    type: "mall",
+    badge: "政务认证",
+    rate: 2,
+    cap: 12,
+    window: "18:30-次日8:30",
+    dist: "970m",
+    walk: "14分钟",
+    count: 28,
+    ev: true,
+    monthly: 168,
+    x: 64,
+    y: 24,
+    noSlope: true,
+    size: "large",
+    covered: true,
+    elevator: true,
+    code: "ZW-B117",
+    rule: "晚间开放社会车辆，近电梯无坡道",
+    occupancy: 38
+  }
+];
+
+const orders = [
+  { id: "CP20260711001", name: "大兴荟聚 P2 · P2-089", time: "昨天 22:10 - 今天 07:42", amount: "¥12.0", state: "已完成" },
+  { id: "CP20260709018", name: "枣园北里 12号院", time: "7月8日 19:33 - 23:05", amount: "¥10.5", state: "已完成" },
+  { id: "CP20260706007", name: "魏师傅的车位", time: "7月6日 09:00 - 11:20", amount: "¥8.0", state: "已退款" }
+];
+
+const owner = {
+  renting: true,
+  revenueToday: 38,
+  revenueWeek: 268,
+  spot: {
+    name: "枣园北里 · B-07",
+    window: "工作日 08:30 - 18:00",
+    price: "¥4 / 时",
+    status: "出租中"
+  },
+  enterprise: {
+    company: "北京生物医药基地园区",
+    lots: 126,
+    activeLots: 84,
+    weeklyRevenue: 18320,
+    openHours: "工作日 19:00 - 次日 08:30",
+    adoption: 67,
+    rows: [
+      { area: "P1 东区", total: 46, shared: 32, revenue: "¥6,820", status: "已上线" },
+      { area: "P1 西区", total: 38, shared: 24, revenue: "¥4,910", status: "已上线" },
+      { area: "地面访客区", total: 22, shared: 16, revenue: "¥3,250", status: "审核中" },
+      { area: "员工临停车区", total: 20, shared: 12, revenue: "¥3,340", status: "待联调" }
+    ]
+  }
+};
+
+const bookings = [];
+
+export async function onRequest({ request }) {
+  try {
+    const url = new URL(request.url);
+    const path = url.pathname.replace(/\/+$/, "") || "/";
+    const method = request.method.toUpperCase();
+
+    if (method === "OPTIONS") return empty(204);
+    if (method === "GET" && path === "/api/health") return json({ ok: true, service: "citypilot-parking-api", version: "0.1.0", runtime: "cloudflare-pages-functions" });
+    if (method === "GET" && path === "/api/spots") return json({ spots });
+    if (method === "GET" && path === "/api/orders") return json({ orders, bookings });
+    if (method === "POST" && path === "/api/recommend") return json(recommendParkingSpot(await readJson(request)));
+    if (method === "POST" && path === "/api/bookings") return json({ booking: createBooking(await readJson(request)) }, 201);
+    if (method === "GET" && path === "/api/owner") return json(owner);
+    if (method === "PATCH" && path === "/api/owner/rent-status") return json(setRentStatus(await readJson(request)));
+    if (method === "POST" && path === "/api/owner/spots") return json(createOwnerSpot(await readJson(request)), 201);
+
+    return json({ error: "Not found" }, 404);
+  } catch (error) {
+    return json({ error: error.message || "Internal Server Error", details: error.details }, error.status || 500);
+  }
+}
+
+async function readJson(request) {
+  const text = await request.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw appError(400, "Invalid JSON body");
+  }
+}
+
+function createBooking(input) {
+  if (!input.spotId) throw appError(400, "spotId is required");
+  const spot = spots.find(item => item.id === Number(input.spotId));
+  if (!spot) throw appError(404, "spot not found", { spotId: input.spotId });
+
+  const durSel = input.durSel || "4小时";
+  const booking = {
+    id: "CP" + Date.now(),
+    spotId: spot.id,
+    spotName: spot.name,
+    code: spot.code,
+    mode: input.mode || "now",
+    dateSel: input.dateSel || "现在",
+    durSel,
+    amount: calculateOrderAmount(spot, durSel),
+    status: "paid",
+    createdAt: new Date().toISOString()
+  };
+
+  bookings.unshift(booking);
+  return booking;
+}
+
+function setRentStatus(input) {
+  if (typeof input.renting !== "boolean") throw appError(400, "renting must be boolean");
+  owner.renting = input.renting;
+  owner.spot.status = owner.renting ? "出租中" : "已暂停";
+  return owner;
+}
+
+function createOwnerSpot(input) {
+  owner.spot = {
+    name: input.name || "新增共享车位",
+    window: input.window || "工作日 08:30 - 18:00",
+    price: input.price || "¥4 / 时",
+    status: "审核通过"
+  };
+  owner.renting = true;
+  return { spot: owner.spot, owner };
+}
+
+function recommendParkingSpot(input) {
+  const need = parseNeed(input);
+  const candidates = filterCandidates(spots, need);
+  const [best] = candidates
+    .map(spot => ({ spot, score: scoreSpot(spot, need) }))
+    .sort((a, b) => b.score - a.score);
+
+  return {
+    spotId: best.spot.id,
+    spot: best.spot,
+    score: Math.min(99, Math.round(best.score)),
+    mode: need.mode,
+    dateSel: need.dateSel,
+    durSel: need.durSel,
+    evOnly: need.wantsEv,
+    smartNoSlope: need.noSlope,
+    smartCovered: need.covered,
+    smartSize: need.smartSize,
+    estimatedFee: calculateOrderAmount(best.spot, need.durSel),
+    reply: buildReply(best.spot, need)
+  };
+}
+
+function parseNeed(input = {}) {
+  const text = String(input.text || "").toLowerCase();
+  const bus = /大巴|客车|团队|巴士/.test(text);
+  const large = /大车|宽|suv|商务/.test(text);
+  const monthly = /月卡|包月|长期|通勤/.test(text);
+  const future = /今晚|明天|预约|稍后|晚上/.test(text);
+  const overnight = /明早|过夜|次日|整晚/.test(text);
+  const daytime = /白天|上午|下午|办事/.test(text);
+
+  return {
+    text,
+    wantsEv: /充电|电车|新能源|ev/.test(text) || Boolean(input.evOnly),
+    noSlope: /无坡|不爬坡|老人|长辈|轮椅|电梯/.test(text) || Boolean(input.smartNoSlope),
+    covered: /室内|地下|下雨|电梯/.test(text) || Boolean(input.smartCovered),
+    bus,
+    large,
+    cheap: /便宜|价格|省钱|免费|低价/.test(text),
+    near: /近|步行|少走|地铁|附近/.test(text),
+    monthly,
+    overnight,
+    daytime,
+    smartSize: bus ? "bus" : large ? "large" : input.smartSize || "any",
+    mode: monthly ? "monthly" : future || overnight ? "future" : "now",
+    dateSel: monthly || future || overnight
+      ? text.includes("21") ? "今晚 21:00" : text.includes("明天") ? "明天 19:00" : "今晚 19:00"
+      : "现在",
+    durSel: overnight ? "至明早8点" : text.includes("2") || daytime ? "2小时" : input.durSel || "4小时"
+  };
+}
+
+function filterCandidates(items, need) {
+  const candidates = items.filter(spot => {
+    if (need.wantsEv && !spot.ev) return false;
+    if (need.noSlope && !spot.noSlope) return false;
+    if (need.covered && !(spot.covered || spot.elevator)) return false;
+    if (need.monthly && spot.monthly <= 0) return false;
+    if (need.smartSize !== "any" && spot.size !== need.smartSize && !(need.smartSize === "large" && spot.size === "bus")) return false;
+    return true;
+  });
+
+  return candidates.length ? candidates : items;
+}
+
+function scoreSpot(spot, need) {
+  let score = 80 - distanceMeters(spot) / 18;
+  if (spot.noSlope) score += 14;
+  if (spot.ev) score += need.wantsEv ? 26 : 8;
+  if (spot.covered) score += need.covered ? 20 : 6;
+  if (spot.elevator) score += need.noSlope ? 12 : 4;
+  if (spot.size === "bus") score += need.bus ? 28 : 8;
+  if (spot.size === "large") score += need.large ? 18 : 5;
+  if (need.cheap) score += spot.rate === 0 ? 24 : Math.max(0, 12 - spot.rate * 3);
+  if (need.near) score += Math.max(0, 20 - distanceMeters(spot) / 35);
+  if (need.overnight && spot.cap > 0) score += 12;
+  if (need.daytime && spot.window.startsWith("08")) score += 16;
+  return score;
+}
+
+function buildReply(spot, need) {
+  const reasons = [
+    spot.dist + "、步行" + spot.walk,
+    spot.ev ? "有充电桩" : "",
+    spot.noSlope ? "无坡道" : "",
+    spot.covered ? "室内车位" : "",
+    sizeLabel(spot.size),
+    need.cheap ? "费用更低" : ""
+  ].filter(Boolean);
+
+  return `建议选 ${spot.name}，${reasons.slice(0, 4).join("，")}。已按你的需求更新筛选，下一步可直接查看详情并锁定车位。`;
+}
+
+function hoursForDuration(duration) {
+  if (duration === "2小时") return 2;
+  if (duration === "至明早8点") return 10;
+  return 4;
+}
+
+function calculateParkingFee(spot, duration) {
+  const parking = spot.rate * hoursForDuration(duration);
+  return spot.cap > 0 ? Math.min(parking, spot.cap) : parking;
+}
+
+function calculateOrderAmount(spot, duration) {
+  return Number((calculateParkingFee(spot, duration) + 0.5).toFixed(1));
+}
+
+function distanceMeters(spot) {
+  if (spot.dist.includes("km")) return Number.parseFloat(spot.dist) * 1000;
+  return Number.parseFloat(spot.dist);
+}
+
+function sizeLabel(size) {
+  return { standard: "标准位", large: "大车位", bus: "大客车位" }[size] || "标准位";
+}
+
+function appError(status, message, details) {
+  const error = new Error(message);
+  error.status = status;
+  error.details = details;
+  return error;
+}
+
+function empty(status = 204) {
+  return new Response(null, { status, headers: corsHeaders() });
+}
+
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      ...corsHeaders(),
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store"
+    }
+  });
+}
+
+function corsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET,POST,PATCH,OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type"
+  };
+}
