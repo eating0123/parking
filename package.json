@@ -1,0 +1,15 @@
+{
+  "name": "citypilot-parking-demo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CityPilot 可妙停 hackathon demo prototype",
+  "scripts": {
+    "dev": "sh backend-java/run.sh",
+    "start": "sh backend-java/run.sh",
+    "dev:node": "node backend/server.js"
+  },
+  "engines": {
+    "java": ">=11",
+    "node": ">=18"
+  }
+}
