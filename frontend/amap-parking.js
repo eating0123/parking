@@ -1,19 +1,46 @@
 (function () {
   const AMAP_WEB_KEY = "64967778bf636782095a55506797954c";
-  const DEFAULT_CENTER = [116.326497, 39.754978];
+  const DEFAULT_CENTER = [116.332493, 39.751847];
 
   let loadPromise = null;
+  let spotPromise = null;
+  let latestSpots = [];
   let map = null;
   let mapHost = null;
   let pickMarker = null;
+  let pickedLngLat = null;
 
-  function spots() {
-    return ((window.CityPilotMock && window.CityPilotMock.spots) || [])
+  function toSpotList(value) {
+    return (value || [])
       .map(spot => Object.assign({}, spot, {
+        id: Number(spot.id),
         lng: Number(spot.lng),
         lat: Number(spot.lat)
       }))
       .filter(spot => Number.isFinite(spot.lng) && Number.isFinite(spot.lat));
+  }
+
+  function fallbackSpots() {
+    return toSpotList((window.CityPilotMock && window.CityPilotMock.spots) || []);
+  }
+
+  function fetchSpots() {
+    if (spotPromise) return spotPromise;
+    spotPromise = fetch("/api/spots")
+      .then(res => (res.ok ? res.json() : Promise.reject(new Error("spots api failed"))))
+      .then(data => {
+        latestSpots = toSpotList(data.spots);
+        return latestSpots;
+      })
+      .catch(() => {
+        latestSpots = fallbackSpots();
+        return latestSpots;
+      });
+    return spotPromise;
+  }
+
+  function currentSpots() {
+    return latestSpots.length ? latestSpots : fallbackSpots();
   }
 
   function loadAmap() {
@@ -35,28 +62,35 @@
     const style = document.createElement("style");
     style.setAttribute("data-amap-parking-style", "1");
     style.textContent = `
-      [data-amap-real] { position:absolute; inset:0; z-index:0; background:#e8f0e4; }
+      [data-amap-real] { position:absolute; inset:0; z-index:1; background:#e8f0e4; }
+      .map [data-amap-real] { z-index:1; }
       .amap-parking-pin { transform:translateY(-4px); display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer; }
       .amap-parking-label { min-width:46px; padding:5px 8px; border-radius:999px; border:1px solid rgba(111,159,79,.45); background:rgba(255,255,255,.92); color:#172015; box-shadow:0 8px 18px rgba(23,32,21,.18); font-size:11px; font-weight:900; line-height:1; white-space:nowrap; text-align:center; }
       .amap-parking-pin.active .amap-parking-label { background:#6F9F4F; border-color:#6F9F4F; color:#10110F; }
       .amap-parking-dot { width:8px; height:8px; border-radius:50%; background:#6F9F4F; border:1px solid rgba(255,255,255,.9); box-shadow:0 4px 10px rgba(23,32,21,.24); }
       .amap-picked-label { padding:5px 9px; border-radius:999px; background:#172015; color:#fff; font-size:11px; font-weight:900; box-shadow:0 8px 18px rgba(23,32,21,.24); }
-      .amap-logo, .amap-copyright { display:none !important; }
+      .amap-parking-error { position:absolute; left:18px; right:18px; top:45%; transform:translateY(-50%); padding:12px 14px; border-radius:16px; background:rgba(255,255,255,.92); color:#172015; font-size:12px; font-weight:800; text-align:center; box-shadow:0 12px 28px rgba(52,86,40,.14); z-index:2; }
     `;
     document.head.appendChild(style);
   }
 
-  function findMapPane() {
+  function findBundledMapPane() {
     const home = document.querySelector("[data-screen-label='找车位']");
     if (!home) return null;
-    return Array.from(home.children).find(child => {
-      const style = child.getAttribute("style") || "";
-      return style.includes("position:absolute") && style.includes("inset:0") && style.includes("z-index:1");
-    }) || null;
+    const pan = home.querySelector("[data-pan-map]");
+    return pan ? pan.parentElement : null;
+  }
+
+  function findSimpleMapPane() {
+    return document.querySelector("section.map");
+  }
+
+  function findMapPane() {
+    return findBundledMapPane() || findSimpleMapPane();
   }
 
   function visibleSpots(mapPane) {
-    const all = spots();
+    const all = currentSpots();
     const text = mapPane.textContent || "";
     const visible = all.filter(spot => text.includes(spot.name));
     return visible.length ? visible : all;
@@ -64,12 +98,12 @@
 
   function selectedSpotId() {
     const text = document.body ? document.body.textContent || "" : "";
-    const selected = spots().find(spot => text.includes(spot.name) && text.includes(spot.rule));
+    const selected = currentSpots().find(spot => text.includes(spot.name) && text.includes(spot.rule));
     return selected ? selected.id : null;
   }
 
   function priceText(spot) {
-    if (spot.rate === 0) return "免费";
+    if (Number(spot.rate) === 0) return "免费";
     return "¥" + spot.rate;
   }
 
@@ -82,13 +116,23 @@
     `;
   }
 
-  function clickSpotCard(mapPane, spot) {
+  function clickSimpleSpot(spot) {
+    const target = document.querySelector('[data-action="selectSpot"][data-id="' + spot.id + '"]');
+    if (target) target.click();
+  }
+
+  function clickBundledSpot(mapPane, spot) {
     const candidates = Array.from(mapPane.querySelectorAll("div"))
       .filter(el => !el.closest("[data-amap-real]"))
       .filter(el => (el.textContent || "").includes(spot.name))
       .filter(el => (el.getAttribute("style") || "").includes("cursor:pointer"))
       .sort((a, b) => (a.textContent || "").length - (b.textContent || "").length);
     if (candidates[0]) candidates[0].click();
+  }
+
+  function clickSpot(mapPane, spot) {
+    clickSimpleSpot(spot);
+    clickBundledSpot(mapPane, spot);
   }
 
   function preparePane(mapPane) {
@@ -102,16 +146,28 @@
     Array.from(mapPane.children).forEach(child => {
       if (child === host) return;
       const style = child.getAttribute("style") || "";
-      if (
-        style.includes("background:#E8F0E4") ||
-        style.includes("right:16px;top:220px") ||
-        style.includes("translate(-50%,-100%)")
-      ) {
-        child.style.display = "none";
-      }
+      const text = child.textContent || "";
+      const isFakeBundledMap = child.matches("[data-pan-map], [data-map-control]") || style.includes("background:#E8F0E4") || style.includes("right:16px;top:220px") || text.includes("拖动地图");
+      const isSimpleFakeMap = child.classList.contains("road") || child.classList.contains("pin");
+      if (isFakeBundledMap || isSimpleFakeMap) child.style.display = "none";
+    });
+
+    Array.from(mapPane.querySelectorAll("[data-map-pin]")).forEach(pin => {
+      pin.style.display = "none";
     });
 
     return host;
+  }
+
+  function addPickMarker(AMap, position) {
+    if (!map || !position) return;
+    if (pickMarker) map.remove(pickMarker);
+    pickMarker = new AMap.Marker({
+      position,
+      anchor: "bottom-center",
+      content: '<div class="amap-picked-label">选点</div>'
+    });
+    map.add(pickMarker);
   }
 
   function renderAmap() {
@@ -119,30 +175,26 @@
     if (!mapPane) return;
     ensureStyle();
     const host = preparePane(mapPane);
-    const list = visibleSpots(mapPane);
 
-    loadAmap().then(AMap => {
+    Promise.all([fetchSpots(), loadAmap()]).then(([, AMap]) => {
       if (!host.isConnected) return;
+      const list = visibleSpots(mapPane);
       if (mapHost !== host) {
         if (map && map.destroy) map.destroy();
         mapHost = host;
         pickMarker = null;
+        pickedLngLat = null;
         map = new AMap.Map(host, {
           center: DEFAULT_CENTER,
-          zoom: 12,
+          zoom: 13,
           resizeEnable: true,
           viewMode: "2D"
         });
         map.addControl(new AMap.Scale());
         map.addControl(new AMap.ToolBar({ position: "RT" }));
         map.on("click", event => {
-          if (pickMarker) map.remove(pickMarker);
-          pickMarker = new AMap.Marker({
-            position: event.lnglat,
-            anchor: "bottom-center",
-            content: '<div class="amap-picked-label">选点</div>'
-          });
-          map.add(pickMarker);
+          pickedLngLat = event.lnglat;
+          addPickMarker(AMap, pickedLngLat);
         });
       }
 
@@ -155,31 +207,43 @@
           anchor: "bottom-center",
           content: markerContent(spot, activeId === spot.id)
         });
-        marker.on("click", () => clickSpotCard(mapPane, spot));
+        marker.on("click", () => clickSpot(mapPane, spot));
         return marker;
       });
       if (markers.length) {
         map.add(markers);
         const active = list.find(spot => activeId === spot.id);
         if (active) {
-          map.setZoomAndCenter(14, [active.lng, active.lat]);
+          map.setZoomAndCenter(15, [active.lng, active.lat]);
         } else if (markers.length === 1) {
-          map.setZoomAndCenter(14, markers[0].getPosition());
+          map.setZoomAndCenter(15, markers[0].getPosition());
         } else {
-          map.setFitView(markers, false, [92, 28, 150, 28], 14);
+          map.setFitView(markers, false, [92, 28, 150, 28], 15);
         }
       }
+      addPickMarker(AMap, pickedLngLat);
     }).catch(() => {
-      host.innerHTML = '<div style="position:absolute;left:18px;right:18px;top:45%;transform:translateY(-50%);padding:12px 14px;border-radius:16px;background:rgba(255,255,255,.9);color:#172015;font-size:12px;font-weight:800;text-align:center;box-shadow:0 12px 28px rgba(52,86,40,.14)">高德地图加载失败，请确认本地域名已加入 Web 端 Key 白名单</div>';
+      host.innerHTML = '<div class="amap-parking-error">高德地图加载失败，请确认 localhost 和 communityparking.pages.dev 已加入 Web 端 Key 白名单</div>';
     });
   }
 
-  const observer = new MutationObserver(() => {
+  const observer = new MutationObserver(mutations => {
+    const onlyAmapInternal = mutations.every(mutation => {
+      const target = mutation.target;
+      return target && target.closest && target.closest("[data-amap-real]");
+    });
+    if (onlyAmapInternal) return;
     window.requestAnimationFrame(renderAmap);
   });
 
-  window.addEventListener("load", () => {
-    renderAmap();
+  function boot() {
+    fetchSpots().finally(renderAmap);
     observer.observe(document.body, { childList: true, subtree: true });
-  });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", boot);
+  } else {
+    boot();
+  }
 })();

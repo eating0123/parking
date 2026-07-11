@@ -34,6 +34,7 @@ public class SearchService {
 
         List<Map<String, Object>> localMatches = searchLocalSpots(spots, query);
         String key = firstEnv("AMAP_WEB_SERVICE_KEY", "AMAP_REST_KEY", "AMAP_KEY");
+        if (key.isEmpty()) key = "2d9d7b965d4ad734cad91114f500eeaa";
         if (key.isEmpty()) {
             return object(
                     "query", query,
