@@ -20,6 +20,7 @@ public class StaticFileHandler implements HttpHandler {
         MIME_TYPES.put(".js", "text/javascript; charset=utf-8");
         MIME_TYPES.put(".json", "application/json; charset=utf-8");
         MIME_TYPES.put(".svg", "image/svg+xml; charset=utf-8");
+        MIME_TYPES.put(".png", "image/png");
     }
 
     private final Path root;
@@ -32,6 +33,9 @@ public class StaticFileHandler implements HttpHandler {
     public void handle(HttpExchange exchange) throws IOException {
         String rawPath = exchange.getRequestURI().getPath();
         String path = "/".equals(rawPath) ? "/frontend/index.html" : URLDecoder.decode(rawPath, StandardCharsets.UTF_8.name());
+        if (path.startsWith("/parking-images/")) {
+            path = "/frontend" + path;
+        }
         Path file = root.resolve(path.substring(1)).normalize();
 
         if (!isAllowed(file) || !Files.exists(file) || Files.isDirectory(file)) {
