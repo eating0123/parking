@@ -163,7 +163,6 @@ function renderHome() {
           <div class="h2">附近可用车位</div>
           <div class="muted small">${spots.length} 个可用 · ${state.mode === "monthly" ? "错峰月卡" : state.dateSel + "起 " + state.durSel}</div>
         </div>
-        <button class="secondary" data-action="toggleView">${state.view === "map" ? "列表" : "地图"}</button>
       </div>
       <div class="chips">
         ${chip("即时停", "mode", state.mode === "now", "now")}
@@ -178,7 +177,7 @@ function renderHome() {
         ${chip("室内近梯", "filter", state.smartCovered, "smartCovered")}
       </div>
     </section>
-    ${state.view === "map" ? renderMap(spots) : renderList(spots)}
+    ${renderMap(spots)}
     <section class="panel section">
       <div class="row">
         <div>
@@ -199,7 +198,7 @@ function renderMap(spots) {
       <div class="road a"></div><div class="road b"></div>
       ${spots.map(spot => `
         <button class="pin ${state.spotId === spot.id ? "active" : ""}" style="left:${spot.x}%;top:${spot.y}%;" data-action="selectSpot" data-id="${spot.id}">
-          ${escapeHtml(state.view === "map" ? spotPrice(spot).replace("/时", "").replace("/月", "") : spot.name)}
+          ${escapeHtml(spotPrice(spot).replace("/时", "").replace("/月", ""))}
         </button>
       `).join("")}
     </section>
@@ -621,7 +620,6 @@ $app.addEventListener("click", event => {
   const id = Number(target.dataset.id);
 
   if (action === "tab") Object.assign(state, { tab: value, step: null, spotId: null });
-  if (action === "toggleView") state.view = state.view === "map" ? "list" : "map";
   if (action === "mode") Object.assign(state, { mode: value, dateSel: value === "now" ? "现在" : "今晚 19:00", spotId: null });
   if (action === "filter") {
     state[value] = !state[value];

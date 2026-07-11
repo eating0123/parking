@@ -150,6 +150,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     template = patchCityPilotPlateStyle(template);
     template = patchCityPilotPhotos(template);
     template = patchCityPilotAddPhoto(template);
+    template = patchCityPilotRemoveListView(template);
 
     const resourceScript = '<script>window.__resources = ' +
       JSON.stringify(resourceMap).replace(/<\//g, '<\\/') +
@@ -849,6 +850,50 @@ function patchCityPilotAddPhoto(template) {
     return template;
   }
   return template.replace(from, to);
+}
+
+function patchCityPilotRemoveListView(template) {
+  const replaceOnce = (source, from, to, label) => {
+    if (!source.includes(from)) {
+      console.warn('[citypilot-remove-list] patch target not found:', label);
+      return source;
+    }
+    return source.replace(from, to);
+  };
+
+  template = replaceOnce(
+    template,
+    `        <div onclick="{{ toggleView }}" style="flex:none;background:rgba(255,255,255,.9);border:1px solid rgba(255,255,255,.75);color:#10110F;border-radius:18px;padding:11px 14px;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 14px 34px rgba(0,0,0,.22)">{{ viewToggleLabel }}</div>
+`,
+    '',
+    'home view toggle'
+  );
+
+  const listStart = template.indexOf('    <!-- LIST VIEW -->');
+  const ownerMarker = '  <!-- ============ OWNER 我要出租 ============ -->';
+  if (listStart < 0) {
+    console.warn('[citypilot-remove-list] patch target not found: list view block');
+  } else {
+    const ownerStart = template.indexOf(ownerMarker, listStart);
+    if (ownerStart < 0) {
+      console.warn('[citypilot-remove-list] patch target not found: owner section marker');
+    } else {
+      template = template.slice(0, listStart) + '  </div>\n  </sc-if>\n\n' + template.slice(ownerStart);
+    }
+  }
+
+  template = replaceOnce(
+    template,
+    `      isMap: st.view === 'map' && !(inComm && st.commStage !== 'done'), isList: st.view === 'list' && !(inComm && st.commStage !== 'done'),
+      viewToggleLabel: st.view === 'map' ? '☰ 列表' : '◈ 地图',
+      toggleView: () => this.setState(s => ({ view: s.view === 'map' ? 'list' : 'map' })),
+      mapGridSize, mapCanvasW, mapCanvasH,`,
+    `      isMap: !(inComm && st.commStage !== 'done'), isList: false,
+      mapGridSize, mapCanvasW, mapCanvasH,`,
+    'view state values'
+  );
+
+  return template;
 }
 
   </script>
