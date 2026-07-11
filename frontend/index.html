@@ -193,11 +193,21 @@ document.addEventListener('DOMContentLoaded', async function() {
     if (window.Babel && typeof window.Babel.transformScriptTags === 'function') {
       window.Babel.transformScriptTags();
     }
+    loadCityPilotAmap();
   } catch (err) {
     setStatus('Error unpacking: ' + err.message);
     console.error('Bundle unpack error:', err);
   }
 });
+
+function loadCityPilotAmap() {
+  if (document.querySelector('script[data-citypilot-amap]')) return;
+  const script = document.createElement('script');
+  script.src = '/amap-parking.js';
+  script.async = true;
+  script.setAttribute('data-citypilot-amap', '1');
+  document.head.appendChild(script);
+}
 
 function patchCityPilotSearch(template) {
   const replaceOnce = (source, from, to, label) => {
