@@ -15,6 +15,7 @@ function createOwnerSpot(input) {
     name: input.name || "新增共享车位",
     window: input.window || "工作日 08:30 - 18:00",
     price: input.price || "¥4 / 时",
+    photoName: input.photoName || "",
     status: "审核通过"
   };
   store.owner.renting = true;

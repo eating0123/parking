@@ -37,6 +37,8 @@ const state = {
   showAdd: false,
   showEnterprise: false,
   adopted: false,
+  addPhoto: null,
+  addPhotoPreview: "",
   data: { spots: [], orders: [], owner: null }
 };
 
@@ -490,6 +492,15 @@ function renderModal() {
           <input class="input" id="addName" value="枣园北里 · B-07" aria-label="车位名称">
           <input class="input" id="addWindow" value="工作日 08:30 - 18:00" aria-label="可出借时段">
           <input class="input" id="addPrice" value="¥4 / 时" aria-label="挂牌价格">
+          <label class="photo-uploader" for="addPhoto">
+            <input id="addPhoto" type="file" accept="image/*" aria-label="拍照或上传车位照片">
+            ${state.addPhotoPreview ? `<img src="${escapeHtml(state.addPhotoPreview)}" alt="车位照片预览">` : `
+              <span class="photo-icon">📷</span>
+              <b>拍照 / 上传车位照片</b>
+              <small>手机端会拉起相机或本地相册</small>
+            `}
+          </label>
+          ${state.addPhoto ? `<div class="muted small">已选择：${escapeHtml(state.addPhoto.name)}</div>` : ""}
           <button class="primary" data-action="submitAdd">提交并上线</button>
         </section>
       </div>
@@ -579,10 +590,17 @@ async function submitAdd() {
   const name = document.querySelector("#addName").value;
   const windowValue = document.querySelector("#addWindow").value;
   const price = document.querySelector("#addPrice").value;
-  const res = await api.send("/api/owner/spots", "POST", { name, window: windowValue, price });
+  const res = await api.send("/api/owner/spots", "POST", {
+    name,
+    window: windowValue,
+    price,
+    photoName: state.addPhoto?.name || ""
+  });
   state.data.owner = res.owner;
   state.ownerRenting = res.owner.renting;
   state.showAdd = false;
+  state.addPhoto = null;
+  state.addPhotoPreview = "";
   render();
 }
 
@@ -631,12 +649,25 @@ $app.addEventListener("click", event => {
   if (action === "presetAi") sendAi(value);
   if (action === "aiSelect") Object.assign(state, { tab: "home", view: "map", spotId: state.aiRecommendedId, step: null });
   if (action === "toggleRent") return toggleRent();
-  if (action === "openAdd") state.showAdd = true;
+  if (action === "openAdd") Object.assign(state, { showAdd: true, addPhoto: null, addPhotoPreview: "" });
   if (action === "submitAdd") return submitAdd();
   if (action === "openEnterprise") state.showEnterprise = true;
   if (action === "closeModal") Object.assign(state, { showAdd: false, showEnterprise: false });
   if (action === "adoptPrice") state.adopted = true;
   render();
+});
+
+$app.addEventListener("change", event => {
+  if (!event.target.matches("#addPhoto")) return;
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  state.addPhoto = file;
+  const reader = new FileReader();
+  reader.onload = () => {
+    state.addPhotoPreview = String(reader.result || "");
+    render();
+  };
+  reader.readAsDataURL(file);
 });
 
 setInterval(() => {
