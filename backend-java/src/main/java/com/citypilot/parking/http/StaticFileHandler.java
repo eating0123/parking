@@ -36,9 +36,6 @@ public class StaticFileHandler implements HttpHandler {
         if (path.startsWith("/parking-images/")) {
             path = "/frontend" + path;
         }
-        if ("/启动图.png".equals(path)) {
-            path = "/frontend/启动图.png";
-        }
         if ("/amap-parking.js".equals(path)) {
             path = "/frontend/amap-parking.js";
         }
