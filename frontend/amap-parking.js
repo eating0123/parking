@@ -10,6 +10,7 @@
   let pickMarker = null;
   let pickedLngLat = null;
   let suppressNextMapClick = false;
+  let selectedAmapSpotId = null;
 
   function toSpotList(value) {
     return (value || [])
@@ -111,6 +112,7 @@
   }
 
   function selectedSpotId() {
+    if (selectedAmapSpotId != null) return selectedAmapSpotId;
     const text = document.body ? document.body.textContent || "" : "";
     const selected = currentSpots().find(spot => text.includes(spot.name) && text.includes(spot.rule));
     return selected ? selected.id : null;
@@ -166,6 +168,7 @@
     sheet.querySelector(".amap-spot-sheet-close").addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
+      selectedAmapSpotId = null;
       sheet.remove();
     });
     sheet.querySelector(".amap-spot-sheet-cta").addEventListener("click", event => {
@@ -229,8 +232,15 @@
     }, 150);
   }
 
+  function focusSpotOnMap(spot) {
+    if (!map || !Number.isFinite(spot.lng) || !Number.isFinite(spot.lat)) return;
+    map.setZoomAndCenter(Math.max(map.getZoom ? map.getZoom() : 15, 15), [spot.lng, spot.lat]);
+  }
+
   function clickSpot(mapPane, spot) {
     console.log("[citypilot-amap] select spot from marker", spot.id, spot.name);
+    selectedAmapSpotId = spot.id;
+    focusSpotOnMap(spot);
     showSpotSheet(mapPane, spot);
     dispatchSelectSpot(spot);
     window.setTimeout(() => {

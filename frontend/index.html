@@ -154,6 +154,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     template = patchCityPilotCompactHomeHeader(template);
     template = patchCityPilotPageTitle(template);
     template = patchCityPilotRemoveManageRows(template);
+    template = patchCityPilotAmapSelect(template);
 
     const resourceScript = '<script>window.__resources = ' +
       JSON.stringify(resourceMap).replace(/<\//g, '<\\/') +
@@ -1028,6 +1029,68 @@ function patchCityPilotRemoveManageRows(template) {
     return template;
   }
   return template.replace(pattern, '');
+}
+
+function patchCityPilotAmapSelect(template) {
+  const replaceOnce = (source, from, to, label) => {
+    if (!source.includes(from)) {
+      console.warn('[citypilot-amap-select] patch target not found:', label);
+      return source;
+    }
+    return source.replace(from, to);
+  };
+
+  template = replaceOnce(
+    template,
+    `    this.initMapPan();
+    this.initSmartPriceDrag();
+    this.initWheels();
+    setTimeout(() => this.positionWheels(), 0);`,
+    `    this.initMapPan();
+    this.initSmartPriceDrag();
+    this.initWheels();
+    this.initAmapMarkerSelect();
+    setTimeout(() => this.positionWheels(), 0);`,
+    'mount hook'
+  );
+
+  template = replaceOnce(
+    template,
+    `    if (this._smartPriceCleanup) this._smartPriceCleanup();
+    if (this._wheelsCleanup) this._wheelsCleanup();
+  }`,
+    `    if (this._smartPriceCleanup) this._smartPriceCleanup();
+    if (this._wheelsCleanup) this._wheelsCleanup();
+    if (this._amapSelectCleanup) this._amapSelectCleanup();
+  }`,
+    'unmount cleanup'
+  );
+
+  template = replaceOnce(
+    template,
+    `  initMapPan() {
+    if (this._mapPanReady) return;`,
+    `  initAmapMarkerSelect() {
+    if (this._amapSelectReady) return;
+    this._amapSelectReady = true;
+    const onSelect = (event) => {
+      const id = Number(event.detail && event.detail.id);
+      if (!Number.isFinite(id)) return;
+      const all = this.data ? this.data() : [];
+      const spot = all.find(s => Number(s.id) === id);
+      console.log('[citypilot-bundle] received select spot event', id, spot && spot.name);
+      this.setState({ tab: 'home', view: 'map', spotId: id, step: null });
+    };
+    window.addEventListener('citypilot:select-spot', onSelect);
+    this._amapSelectCleanup = () => window.removeEventListener('citypilot:select-spot', onSelect);
+  }
+
+  initMapPan() {
+    if (this._mapPanReady) return;`,
+    'select listener method'
+  );
+
+  return template;
 }
 
   </script>
