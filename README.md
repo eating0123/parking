@@ -1,6 +1,6 @@
-# CityPilot 可妙停 Demo
+# PARKING GENIE  可妙停
 
-可妙停是一个面向错峰共享停车的黑客松 demo。当前可运行版本由 `frontend/` 静态前端和 `backend-java/` Java 后端组成：Java 服务负责 API、mock 数据、搜索推荐逻辑，并同时托管前端页面。
+可妙停是一个面向错峰共享停车的产品。当前可运行版本由 `frontend/` 静态前端和 `backend-java/` Java 后端组成：Java 服务负责 API、mock 数据、搜索推荐逻辑，并同时托管前端页面。
 
 ## 当前实现
 
