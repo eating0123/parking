@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Bundled Page</title>
+  <title>可妙停</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #E5ECE1; display: flex; align-items: center; justify-content: center; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
@@ -151,6 +151,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     template = patchCityPilotPhotos(template);
     template = patchCityPilotAddPhoto(template);
     template = patchCityPilotRemoveListView(template);
+    template = patchCityPilotCompactHomeHeader(template);
+    template = patchCityPilotPageTitle(template);
 
     const resourceScript = '<script>window.__resources = ' +
       JSON.stringify(resourceMap).replace(/<\//g, '<\\/') +
@@ -894,6 +896,30 @@ function patchCityPilotRemoveListView(template) {
   );
 
   return template;
+}
+
+function patchCityPilotCompactHomeHeader(template) {
+  const from = `    <div style="padding:58px 16px 10px;display:flex;flex-direction:column;gap:10px;background:linear-gradient(rgba(246,251,243,.96) 72%,rgba(246,251,243,0));z-index:5">`;
+  const to = `    <div style="padding:16px 16px 10px;display:flex;flex-direction:column;gap:10px;background:linear-gradient(rgba(246,251,243,.96) 72%,rgba(246,251,243,0));z-index:5">`;
+  if (!template.includes(from)) {
+    console.warn('[citypilot-compact-header] patch target not found: home header padding');
+    return template;
+  }
+  return template.replace(from, to);
+}
+
+function patchCityPilotPageTitle(template) {
+  const title = '<title>可妙停</title>';
+  if (/<title>[\s\S]*?<\/title>/i.test(template)) {
+    return template.replace(/<title>[\s\S]*?<\/title>/i, title);
+  }
+  const headOpen = template.match(/<head[^>]*>/i);
+  if (!headOpen) {
+    console.warn('[citypilot-page-title] patch target not found: head');
+    return template;
+  }
+  const i = headOpen.index + headOpen[0].length;
+  return template.slice(0, i) + '\n' + title + template.slice(i);
 }
 
   </script>
