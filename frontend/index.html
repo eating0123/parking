@@ -267,7 +267,7 @@ function patchCityPilotSearch(template) {
     this._homeSearchReady = true;
     const commit = (value) => {
       const next = String(value || '').trim();
-      if (next === (this.state.homeSearch || '')) return;
+      if (next === (this.state.homeSearch || '') && this.state.searchLoading) return;
       this.applyHomeSearch(next);
     };
     const onInput = (e) => {
@@ -287,11 +287,25 @@ function patchCityPilotSearch(template) {
         e.preventDefault();
       }
     };
+    const onClick = (e) => {
+      const target = e.target && e.target.closest ? e.target.closest('[data-home-search-trigger],[data-home-clear]') : null;
+      if (!target) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (target.matches('[data-home-clear]')) {
+        this.clearHomeSearch();
+        return;
+      }
+      const el = document.querySelector('[data-home-search]');
+      commit((el && el.value) || this._homeSearchDraft || this.state.homeSearch || '');
+    };
     document.addEventListener('input', onInput);
     document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('click', onClick, true);
     this._homeSearchCleanup = () => {
       document.removeEventListener('input', onInput);
       document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('click', onClick, true);
     };
   }
 
@@ -305,7 +319,10 @@ function patchCityPilotSearch(template) {
     }
     this.setState({ homeSearch: text, searchLoading: true, searchError: '', spotId: null, step: null });
     try {
-      const res = await fetch('/api/search?q=' + encodeURIComponent(text));
+      const res = await fetch('/api/search?q=' + encodeURIComponent(text) + '&city=' + encodeURIComponent('北京'), {
+        headers: { 'Accept': 'application/json' },
+        cache: 'no-store'
+      });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
       this.setState({
@@ -318,8 +335,8 @@ function patchCityPilotSearch(template) {
         step: null
       });
     } catch (error) {
-      console.warn('[citypilot-search] /api/search failed, falling back to local filter:', error);
-      this.setState({ homeSearch: text, searchSpots: null, searchSource: 'local-fallback', searchLoading: false, searchError: '接口不可用，已使用本地筛选', spotId: null, step: null });
+      console.warn('[citypilot-search] /api/search failed:', error);
+      this.setState({ homeSearch: text, searchSpots: [], searchSource: 'api', searchLoading: false, searchError: '搜索接口请求失败', spotId: null, step: null });
     }
   }
 

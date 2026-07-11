@@ -39,6 +39,11 @@ const state = {
   adopted: false,
   addPhoto: null,
   addPhotoPreview: "",
+  homeSearch: "",
+  searchResults: null,
+  searchSource: "",
+  searchLoading: false,
+  searchError: "",
   data: { spots: [], orders: [], owner: null }
 };
 
@@ -76,7 +81,9 @@ function distMeters(spot) {
 
 function filteredSpots() {
   const monthly = state.mode === "monthly";
-  const list = state.data.spots.filter(spot => {
+  const searchActive = Array.isArray(state.searchResults);
+  const source = searchActive ? state.searchResults : state.data.spots;
+  const list = source.filter(spot => {
     if (state.evOnly && !spot.ev) return false;
     if (state.smartNoSlope && !spot.noSlope) return false;
     if (state.smartCovered && !(spot.covered || spot.elevator)) return false;
@@ -84,17 +91,20 @@ function filteredSpots() {
     if (state.smartSize !== "any" && spot.size !== state.smartSize && !(state.smartSize === "large" && spot.size === "bus")) return false;
     return true;
   });
-  return list.length ? list : state.data.spots;
+  if (list.length || searchActive) return list;
+  return state.data.spots;
 }
 
 function selectedSpot() {
-  return state.data.spots.find(spot => spot.id === state.spotId) || state.data.spots[0];
+  return state.data.spots.find(spot => spot.id === state.spotId)
+    || (state.searchResults || []).find(spot => spot.id === state.spotId)
+    || state.data.spots[0];
 }
 
 function bestSpot() {
   return filteredSpots()
     .slice()
-    .sort((a, b) => smartScore(b) - smartScore(a))[0];
+    .sort((a, b) => smartScore(b) - smartScore(a))[0] || state.data.spots[0];
 }
 
 function smartScore(spot) {
@@ -156,8 +166,25 @@ function renderTabs() {
 function renderHome() {
   const spots = filteredSpots();
   const best = bestSpot();
+  const searchSummary = state.searchLoading
+    ? `正在请求接口搜索“${escapeHtml(state.homeSearch)}”...`
+    : state.searchError
+      ? state.searchError
+      : state.homeSearch
+        ? `已通过 ${escapeHtml(state.searchSource || "api")} 搜索“${escapeHtml(state.homeSearch)}” · ${spots.length} 个结果`
+        : "";
   const body = `
     <section class="section stack">
+      <form class="chat-input" data-action="homeSearchForm">
+        <input class="input" name="homeSearch" value="${escapeHtml(state.homeSearch)}" placeholder="搜索地点 / 车位 / 充电桩" ${state.searchLoading ? "disabled" : ""}>
+        <button class="primary" type="submit" ${state.searchLoading ? "disabled" : ""}>${state.searchLoading ? "搜索中" : "搜索"}</button>
+      </form>
+      ${searchSummary ? `
+        <div class="row small muted">
+          <span>${searchSummary}</span>
+          ${state.homeSearch ? `<button class="secondary" data-action="clearSearch" type="button">清空</button>` : ""}
+        </div>
+      ` : ""}
       <div class="row">
         <div>
           <div class="h2">附近可用车位</div>
@@ -182,9 +209,9 @@ function renderHome() {
       <div class="row">
         <div>
           <div class="h3">智能匹配</div>
-          <div class="muted small">${best.name} · ${best.dist} · ${best.ev ? "可充电" : sizeName(best.size)}</div>
+          <div class="muted small">${best ? `${best.name} · ${best.dist} · ${best.ev ? "可充电" : sizeName(best.size)}` : "暂无匹配车位"}</div>
         </div>
-        <button class="primary" data-action="selectSpot" data-id="${best.id}">查看</button>
+        ${best ? `<button class="primary" data-action="selectSpot" data-id="${best.id}">查看</button>` : ""}
       </div>
     </section>
     ${state.spotId ? renderSpotSheet(selectedSpot()) : ""}
@@ -603,12 +630,64 @@ async function submitAdd() {
   render();
 }
 
+async function searchParking(text) {
+  const query = String(text || "").trim();
+  if (!query) {
+    Object.assign(state, {
+      homeSearch: "",
+      searchResults: null,
+      searchSource: "",
+      searchLoading: false,
+      searchError: "",
+      spotId: null
+    });
+    render();
+    return;
+  }
+
+  Object.assign(state, {
+    homeSearch: query,
+    searchLoading: true,
+    searchError: "",
+    spotId: null,
+    step: null
+  });
+  render();
+
+  try {
+    const data = await api.get(`/api/search?q=${encodeURIComponent(query)}&city=${encodeURIComponent("北京")}`);
+    Object.assign(state, {
+      homeSearch: query,
+      searchResults: Array.isArray(data.spots) ? data.spots : [],
+      searchSource: data.source || "api",
+      searchLoading: false,
+      searchError: "",
+      spotId: null,
+      step: null
+    });
+  } catch (error) {
+    Object.assign(state, {
+      searchResults: [],
+      searchSource: "api",
+      searchLoading: false,
+      searchError: `搜索接口请求失败：${error.message || "unknown error"}`,
+      spotId: null,
+      step: null
+    });
+  }
+  render();
+}
+
 $app.addEventListener("submit", event => {
   if (event.target.matches("[data-action='aiForm']")) {
     event.preventDefault();
     const input = event.target.elements.aiText;
     sendAi(input.value);
     input.value = "";
+  }
+  if (event.target.matches("[data-action='homeSearchForm']")) {
+    event.preventDefault();
+    searchParking(event.target.elements.homeSearch.value);
   }
 });
 
@@ -643,6 +722,9 @@ $app.addEventListener("click", event => {
   if (action === "smartPick") {
     const spot = bestSpot();
     Object.assign(state, { tab: "home", view: "map", spotId: spot.id, step: null });
+  }
+  if (action === "clearSearch") {
+    Object.assign(state, { homeSearch: "", searchResults: null, searchSource: "", searchLoading: false, searchError: "", spotId: null, step: null });
   }
   if (action === "presetAi") sendAi(value);
   if (action === "aiSelect") Object.assign(state, { tab: "home", view: "map", spotId: state.aiRecommendedId, step: null });
