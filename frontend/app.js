@@ -737,6 +737,14 @@ $app.addEventListener("click", event => {
   render();
 });
 
+window.addEventListener("citypilot:select-spot", event => {
+  const id = Number(event.detail && event.detail.id);
+  if (!Number.isFinite(id)) return;
+  console.log("[citypilot-app] received select spot event", id, event.detail && event.detail.spot && event.detail.spot.name);
+  state.spotId = id;
+  render();
+});
+
 $app.addEventListener("change", event => {
   if (!event.target.matches("#addPhoto")) return;
   const file = event.target.files && event.target.files[0];
