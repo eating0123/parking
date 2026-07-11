@@ -1,4 +1,5 @@
 /Users/wangxiaoxi07/builder_c005/parking/backend-java/src/main/java/com/citypilot/parking/CityPilotApplication.java
+/Users/wangxiaoxi07/builder_c005/parking/backend-java/src/main/java/com/citypilot/parking/controllers/CommunityController.java
 /Users/wangxiaoxi07/builder_c005/parking/backend-java/src/main/java/com/citypilot/parking/controllers/HealthController.java
 /Users/wangxiaoxi07/builder_c005/parking/backend-java/src/main/java/com/citypilot/parking/controllers/OwnerController.java
 /Users/wangxiaoxi07/builder_c005/parking/backend-java/src/main/java/com/citypilot/parking/controllers/ParkingController.java
@@ -11,6 +12,7 @@
 /Users/wangxiaoxi07/builder_c005/parking/backend-java/src/main/java/com/citypilot/parking/repositories/OwnerRepository.java
 /Users/wangxiaoxi07/builder_c005/parking/backend-java/src/main/java/com/citypilot/parking/repositories/ParkingRepository.java
 /Users/wangxiaoxi07/builder_c005/parking/backend-java/src/main/java/com/citypilot/parking/services/BookingService.java
+/Users/wangxiaoxi07/builder_c005/parking/backend-java/src/main/java/com/citypilot/parking/services/CommunityService.java
 /Users/wangxiaoxi07/builder_c005/parking/backend-java/src/main/java/com/citypilot/parking/services/OwnerService.java
 /Users/wangxiaoxi07/builder_c005/parking/backend-java/src/main/java/com/citypilot/parking/services/PricingService.java
 /Users/wangxiaoxi07/builder_c005/parking/backend-java/src/main/java/com/citypilot/parking/services/RecommendationService.java

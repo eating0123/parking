@@ -29,7 +29,7 @@
   <div id="__bundler_loading">Unpacking...</div>
 
   <script>
-    
+
 document.addEventListener('DOMContentLoaded', async function() {
   const loading = document.getElementById('__bundler_loading');
   function setStatus(msg) { if (loading) loading.textContent = msg; }
@@ -145,6 +145,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     // a null origin, so crossorigin forces a CORS fetch that SRI then rejects.
     // The manifest bytes are ours; SRI protects against CDN compromise, not this.
     template = template.replace(/\s+integrity="[^"]*"/gi, '').replace(/\s+crossorigin="[^"]*"/gi, '');
+    template = patchCityPilotSearch(template);
+    template = patchCityPilotModeTabs(template);
+    template = patchCityPilotPlateStyle(template);
+    template = patchCityPilotPhotos(template);
 
     const resourceScript = '<script>window.__resources = ' +
       JSON.stringify(resourceMap).replace(/<\//g, '<\\/') +
@@ -194,6 +198,607 @@ document.addEventListener('DOMContentLoaded', async function() {
     console.error('Bundle unpack error:', err);
   }
 });
+
+function patchCityPilotSearch(template) {
+  const replaceOnce = (source, from, to, label) => {
+    if (!source.includes(from)) {
+      console.warn('[citypilot-search] patch target not found:', label);
+      return source;
+    }
+    return source.replace(from, to);
+  };
+
+  template = replaceOnce(
+    template,
+    `state = {
+    tab: 'home', view: 'map', mode: 'now', commStage: 'auth', commDistrict: 'zaoyuan', commPicker: false, bookMode: 'once', evOnly: false, mapZoom: 1,`,
+    `state = {
+    tab: 'home', view: 'map', mode: 'now', commStage: 'auth', commDistrict: 'zaoyuan', commPicker: false, bookMode: 'once', evOnly: false, mapZoom: 1, homeSearch: '', searchSpots: null, searchSource: '', searchLoading: false, searchError: '',`,
+    'state.homeSearch'
+  );
+
+  template = replaceOnce(
+    template,
+    `        <div style="flex:1;display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.72);backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.66);border-radius:18px;padding:11px 13px;box-shadow:0 14px 34px rgba(52,86,40,.12)">
+          <div style="width:14px;height:14px;border:2px solid rgba(23,32,21,.4);border-radius:50%;position:relative"><div style="position:absolute;width:2px;height:6px;background:rgba(23,32,21,.4);transform:rotate(-45deg);bottom:-4px;right:-2px;border-radius:2px"></div></div>
+          <span style="font-size:14px;color:rgba(23,32,21,.45)">北京大兴区 · 枣园附近</span>
+        </div>`,
+    `        <div style="flex:1;display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.72);backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.66);border-radius:18px;padding:9px 10px 9px 13px;box-shadow:0 14px 34px rgba(52,86,40,.12)">
+          <div style="width:14px;height:14px;border:2px solid rgba(23,32,21,.4);border-radius:50%;position:relative;flex:none"><div style="position:absolute;width:2px;height:6px;background:rgba(23,32,21,.4);transform:rotate(-45deg);bottom:-4px;right:-2px;border-radius:2px"></div></div>
+          <input data-home-search="1" sc-camel-default-value="{{ homeSearch }}" placeholder="搜索地点 / 车位 / 充电桩" style="flex:1;min-width:0;border:0;outline:none;background:transparent;color:#172015;font-size:14px;font-weight:650;font-family:-apple-system,'PingFang SC',system-ui,sans-serif">
+          <sc-if value="{{ hasHomeSearch }}" hint-placeholder-val="{{ false }}"><div data-home-clear="1" onclick="{{ clearHomeSearch }}" style="flex:none;width:24px;height:24px;border-radius:50%;background:rgba(23,32,21,.08);color:rgba(23,32,21,.58);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;cursor:pointer">×</div></sc-if>
+          <div data-home-search-trigger="1" onclick="{{ applyHomeSearch }}" style="flex:none;background:rgba(111,159,79,.16);border:1px solid rgba(111,159,79,.28);color:#4E7B36;border-radius:12px;padding:7px 9px;font-size:11px;font-weight:900;cursor:pointer">搜索</div>
+        </div>`,
+    'home search input'
+  );
+
+  template = replaceOnce(
+    template,
+    `      <sc-if value="{{ commDone }}" hint-placeholder-val="{{ false }}">`,
+    `      <sc-if value="{{ hasHomeSearch }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:11px;color:rgba(23,32,21,.58);padding:0 2px">
+          <span>{{ searchSummary }}</span>
+          <span onclick="{{ clearHomeSearch }}" style="font-weight:900;color:#4E7B36;cursor:pointer">清空</span>
+        </div>
+      </sc-if>
+      <sc-if value="{{ commDone }}" hint-placeholder-val="{{ false }}">`,
+    'home search summary'
+  );
+
+  template = replaceOnce(
+    template,
+    `  isReportPrompt(text) {`,
+    `  initHomeSearch() {
+    if (this._homeSearchReady) return;
+    this._homeSearchReady = true;
+    const commit = (value) => {
+      const next = String(value || '').trim();
+      if (next === (this.state.homeSearch || '')) return;
+      this.applyHomeSearch(next);
+    };
+    const onInput = (e) => {
+      const el = e.target && e.target.closest ? e.target.closest('[data-home-search]') : null;
+      if (!el) return;
+      this._homeSearchDraft = el.value;
+    };
+    const onKeyDown = (e) => {
+      const el = e.target && e.target.closest ? e.target.closest('[data-home-search]') : null;
+      if (!el) return;
+      if (e.key === 'Enter') {
+        commit(el.value);
+        e.preventDefault();
+      } else if (e.key === 'Escape') {
+        el.value = '';
+        commit('');
+        e.preventDefault();
+      }
+    };
+    document.addEventListener('input', onInput);
+    document.addEventListener('keydown', onKeyDown);
+    this._homeSearchCleanup = () => {
+      document.removeEventListener('input', onInput);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }
+
+  async applyHomeSearch(value) {
+    const el = document.querySelector('[data-home-search]');
+    if (value && typeof value === 'object') value = null;
+    const text = String(value == null ? ((el && el.value) || '') : value).trim();
+    if (!text) {
+      this.setState({ homeSearch: '', searchSpots: null, searchSource: '', searchLoading: false, searchError: '', spotId: null, step: null });
+      return;
+    }
+    this.setState({ homeSearch: text, searchLoading: true, searchError: '', spotId: null, step: null });
+    try {
+      const res = await fetch('/api/search?q=' + encodeURIComponent(text));
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      this.setState({
+        homeSearch: text,
+        searchSpots: Array.isArray(data.spots) ? data.spots : [],
+        searchSource: data.source || 'api',
+        searchLoading: false,
+        searchError: '',
+        spotId: null,
+        step: null
+      });
+    } catch (error) {
+      console.warn('[citypilot-search] /api/search failed, falling back to local filter:', error);
+      this.setState({ homeSearch: text, searchSpots: null, searchSource: 'local-fallback', searchLoading: false, searchError: '接口不可用，已使用本地筛选', spotId: null, step: null });
+    }
+  }
+
+  clearHomeSearch() {
+    const el = document.querySelector('[data-home-search]');
+    if (el) el.value = '';
+    this.setState({ homeSearch: '', searchSpots: null, searchSource: '', searchLoading: false, searchError: '', spotId: null, step: null });
+  }
+
+  isReportPrompt(text) {`,
+    'search methods'
+  );
+
+  template = replaceOnce(
+    template,
+    `    this.initWheels();
+    setTimeout(() => this.positionWheels(), 0);`,
+    `    this.initWheels();
+    this.initHomeSearch();
+    setTimeout(() => this.positionWheels(), 0);`,
+    'home search mount'
+  );
+
+  template = replaceOnce(
+    template,
+    `    if (this._wheelsCleanup) this._wheelsCleanup();
+  }`,
+    `    if (this._wheelsCleanup) this._wheelsCleanup();
+    if (this._homeSearchCleanup) this._homeSearchCleanup();
+  }`,
+    'home search cleanup'
+  );
+
+  template = replaceOnce(
+    template,
+    `    const all = this.data();
+    const inComm = st.mode === 'community';`,
+    `    const baseSpots = this.data();
+    const apiSearchActive = Array.isArray(st.searchSpots);
+    const all = apiSearchActive ? st.searchSpots : baseSpots;
+    const inComm = st.mode === 'community';`,
+    'api search result source'
+  );
+
+  template = replaceOnce(
+    template,
+    `    const distMeters = (s) => s.dist.includes('km') ? parseFloat(s.dist) * 1000 : parseFloat(s.dist);
+    const sizeOk = (s) => st.smartSize === 'any' || s.size === st.smartSize || (st.smartSize === 'large' && s.size === 'bus');
+    let list = all.filter(s => (!st.evOnly || s.ev) && (!st.smartNoSlope || s.noSlope) && sizeOk(s) && (!st.smartCovered || s.covered || s.elevator) && (!inComm || curDist.spots.indexOf(s.id) !== -1));
+    if (!list.length) list = all.filter(s => (!inComm || curDist.spots.indexOf(s.id) !== -1));`,
+    `    const distMeters = (s) => s.dist.includes('km') ? parseFloat(s.dist) * 1000 : parseFloat(s.dist);
+    const sizeOk = (s) => st.smartSize === 'any' || s.size === st.smartSize || (st.smartSize === 'large' && s.size === 'bus');
+    const searchText = (st.homeSearch || '').trim().toLowerCase();
+    const spotSearchText = (s) => [
+      s.name, s.addr, s.badge, s.rule, s.window, s.dist, s.walk,
+      s.type === 'community' ? '社区 小区 居委会 老旧小区 共享' : '',
+      s.type === 'personal' ? '个人 私家 邻里 业主' : '',
+      s.type === 'mall' ? '商场 地下 车库' : '',
+      s.ev ? '充电桩 可充电 充电' : '无充电',
+      s.noSlope ? '无坡道 适老 老人' : '有坡道',
+      s.covered || s.elevator ? '室内 地下 电梯 近梯' : '地面',
+      s.size === 'bus' ? '大客车 大巴 宽车位' : s.size === 'large' ? '大车位 宽车位' : '标准位',
+      s.rate === 0 ? '免费' : ('¥' + s.rate + ' ' + s.rate + '元'),
+      s.monthly ? ('月卡 包月 ' + s.monthly) : ''
+    ].join(' ').toLowerCase();
+    const matchesSearch = (s) => !searchText || spotSearchText(s).includes(searchText);
+    let list = all.filter(s => (apiSearchActive || matchesSearch(s)) && (!st.evOnly || s.ev) && (!st.smartNoSlope || s.noSlope) && sizeOk(s) && (!st.smartCovered || s.covered || s.elevator) && (!inComm || curDist.spots.indexOf(s.id) !== -1));
+    if (!list.length && !searchText && !apiSearchActive) list = all.filter(s => (!inComm || curDist.spots.indexOf(s.id) !== -1));`,
+    'search filter'
+  );
+
+	  template = replaceOnce(
+	    template,
+	    `      tabs, modeChips, spots, bars, demandBars, smartChips,`,
+	    `      tabs, modeChips, spots, bars, demandBars, smartChips,
+	      isFutureMode: st.mode === 'future',
+	      reserveDateOpen: !!st.reserveDateOpen,
+	      reserveStartOpen: !!st.reserveStartOpen,
+	      reserveEndOpen: !!st.reserveEndOpen,
+	      reserveDateOptions,
+	      reserveStartOptions,
+	      reserveEndOptions,
+	      selectedReserveDate,
+	      selectedReserveDateShort,
+	      selectedReserveStart,
+	      selectedReserveEnd,
+	      reserveDateArrow: st.reserveDateOpen ? '⌃' : '⌄',
+	      reserveStartArrow: st.reserveStartOpen ? '⌃' : '⌄',
+	      reserveEndArrow: st.reserveEndOpen ? '⌃' : '⌄',
+	      toggleReserveDate: () => this.setState(s => ({ reserveDateOpen: !s.reserveDateOpen, reserveStartOpen: false, reserveEndOpen: false })),
+	      toggleReserveStart: () => this.setState(s => ({ reserveStartOpen: !s.reserveStartOpen, reserveDateOpen: false, reserveEndOpen: false })),
+	      toggleReserveEnd: () => this.setState(s => ({ reserveEndOpen: !s.reserveEndOpen, reserveDateOpen: false, reserveStartOpen: false })),
+	      homeSearch: st.homeSearch || '',
+	      hasHomeSearch: !!searchText || !!st.searchLoading || !!st.searchError,
+	      searchSummary: st.searchLoading ? ('正在通过接口搜索“' + st.homeSearch + '”...') : (searchText ? ((st.searchError ? st.searchError + ' · ' : '') + '已搜索“' + st.homeSearch + '” · ' + list.length + ' 个结果' + (st.searchSource ? ' · ' + st.searchSource : '')) : ''),`,
+    'search values'
+  );
+
+  return template;
+}
+
+function patchCityPilotModeTabs(template) {
+  const replaceOnce = (source, from, to, label) => {
+    if (!source.includes(from)) {
+      console.warn('[citypilot-mode-tabs] patch target not found:', label);
+      return source;
+    }
+    return source.replace(from, to);
+  };
+
+  template = replaceOnce(
+    template,
+    `    const modeChips = [
+      { key: 'now', label: '即时停' }, { key: 'future', label: '预约' }, { key: 'community', label: '老旧小区专区' }
+    ].map(m => Object.assign({ label: m.label, pick: () => this.setState({ mode: m.key, dateSel: m.key === 'now' ? '现在' : '今晚 19:00', spotId: null }) }, chip(st.mode === m.key)));
+
+    // ===== 滚轮选择：开始时间(日期/时/分) + 停车时长 =====`,
+    `    const reservePad2 = (n) => String(n).padStart(2, '0');
+    const reserveWeekday = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    const reserveDateValue = (d) => d.getFullYear() + '-' + reservePad2(d.getMonth() + 1) + '-' + reservePad2(d.getDate());
+    const reserveDateLabel = (d) => d.getFullYear() + '年' + (d.getMonth() + 1) + '月' + d.getDate() + '日 ' + reserveWeekday[d.getDay()];
+    const reserveToday = new Date();
+    reserveToday.setHours(0, 0, 0, 0);
+    const reserveEndDate = new Date(reserveToday);
+    reserveEndDate.setMonth(reserveEndDate.getMonth() + 1);
+    const reserveDateRaw = [];
+    for (let d = new Date(reserveToday); d <= reserveEndDate; d.setDate(d.getDate() + 1)) {
+      reserveDateRaw.push({ value: reserveDateValue(d), label: reserveDateLabel(d), sub: d.getMonth() === reserveToday.getMonth() ? '本月' : '下月' });
+    }
+    const defaultReserveDate = reserveDateRaw[0];
+    const selectedReserveDateValue = st.reserveDateValue || defaultReserveDate.value;
+    const selectedReserveDateObj = new Date(selectedReserveDateValue + 'T00:00:00');
+    const selectedReserveDate = st.reserveDateLabel || reserveDateLabel(selectedReserveDateObj);
+    const selectedReserveDateShort = (selectedReserveDateObj.getMonth() + 1) + '月' + selectedReserveDateObj.getDate() + '日 ' + reserveWeekday[selectedReserveDateObj.getDay()];
+    const reserveToMin = (t) => {
+      const p = String(t || '00:00').split(':').map(Number);
+      return p[0] * 60 + p[1];
+    };
+    const reserveToTime = (m) => reservePad2(Math.floor(m / 60)) + ':' + reservePad2(m % 60);
+    const reserveDurationText = (start, end) => {
+      const mins = Math.max(30, reserveToMin(end) - reserveToMin(start));
+      return (mins % 60 === 0 ? mins / 60 : (mins / 60).toFixed(1)) + '小时';
+    };
+    const reserveTimes = [];
+    for (let m = 6 * 60; m <= 23 * 60 + 30; m += 30) reserveTimes.push(reserveToTime(m));
+    const reserveStartTimes = reserveTimes.filter(t => reserveToMin(t) <= 22 * 60 + 30);
+    const selectedReserveStart = st.reserveStart || '19:00';
+    let selectedReserveEnd = st.reserveEnd || '21:00';
+    if (reserveToMin(selectedReserveEnd) <= reserveToMin(selectedReserveStart)) {
+      selectedReserveEnd = reserveTimes.find(t => reserveToMin(t) > reserveToMin(selectedReserveStart)) || '23:30';
+    }
+    const composeReserveDateSel = (dateLabel, start, end) => dateLabel + ' ' + start + '-' + end;
+    const selectedReserveDuration = reserveDurationText(selectedReserveStart, selectedReserveEnd);
+    const reserveDateSel = composeReserveDateSel(selectedReserveDate, selectedReserveStart, selectedReserveEnd);
+
+    const modeChips = [
+      { key: 'now', label: '即时停' }, { key: 'future', label: '预约' }, { key: 'community', label: '老旧小区专区' }
+    ].map(m => Object.assign({
+      label: m.label,
+      pick: () => this.setState({
+        mode: m.key,
+        dateSel: m.key === 'now' ? '现在' : (m.key === 'future' ? reserveDateSel : st.dateSel),
+        durSel: m.key === 'future' ? selectedReserveDuration : (st.durSel || '4小时'),
+        spotId: null,
+        step: null,
+        reserveDateOpen: false,
+        reserveStartOpen: false,
+        reserveEndOpen: false
+      })
+    }, chip(st.mode === m.key)));
+
+    const reserveDateOptions = reserveDateRaw.map(d => {
+      const active = selectedReserveDateValue === d.value;
+      return {
+        label: d.label,
+        sub: d.sub,
+        bg: active ? 'rgba(111,159,79,.16)' : 'rgba(255,255,255,.76)',
+        bd: active ? 'rgba(111,159,79,.58)' : 'rgba(111,159,79,.12)',
+        fg: active ? '#172015' : 'rgba(23,32,21,.72)',
+        subColor: active ? '#4E7B36' : 'rgba(23,32,21,.42)',
+        pick: () => this.setState({ mode: 'future', reserveDateValue: d.value, reserveDateLabel: d.label, dateSel: composeReserveDateSel(d.label, selectedReserveStart, selectedReserveEnd), durSel: selectedReserveDuration, spotId: null, reserveDateOpen: false })
+      };
+    });
+    const reserveStartOptions = reserveStartTimes.map(t => {
+      const active = selectedReserveStart === t;
+      const nextEnd = reserveToMin(selectedReserveEnd) <= reserveToMin(t) ? (reserveTimes.find(x => reserveToMin(x) >= reserveToMin(t) + 120) || reserveTimes[reserveTimes.length - 1]) : selectedReserveEnd;
+      return Object.assign({
+        label: t,
+        pick: () => this.setState({ mode: 'future', reserveStart: t, reserveEnd: nextEnd, dateSel: composeReserveDateSel(selectedReserveDate, t, nextEnd), durSel: reserveDurationText(t, nextEnd), spotId: null, reserveStartOpen: false })
+      }, chip(active));
+    });
+    const reserveEndOptions = reserveTimes.filter(t => reserveToMin(t) > reserveToMin(selectedReserveStart)).map(t => Object.assign({
+      label: t,
+      pick: () => this.setState({ mode: 'future', reserveEnd: t, dateSel: composeReserveDateSel(selectedReserveDate, selectedReserveStart, t), durSel: reserveDurationText(selectedReserveStart, t), spotId: null, reserveEndOpen: false })
+    }, chip(selectedReserveEnd === t)));
+
+    const dateOpts = st.mode === 'future' ? [reserveDateSel] : ['现在'];
+    const dateChips = dateOpts.map(d => Object.assign({ label: d, pick: () => this.setState({ dateSel: d, durIdx: null }) }, chip(st.dateSel === d || (dateOpts.length === 1))));
+    const durChips = ['2小时', '4小时', '至明早8点'].map(d => Object.assign({ label: d, pick: () => this.setState({ durSel: d, durIdx: null }) }, chip(st.durSel === d)));
+
+    // ===== 滚轮选择：开始时间(日期/时/分) + 停车时长 =====`,
+    'mode chips'
+  );
+
+  template = replaceOnce(
+    template,
+    `      </div>
+      <sc-if value="{{ hasHomeSearch }}" hint-placeholder-val="{{ false }}">`,
+    `      </div>
+      <sc-if value="{{ isFutureMode }}" hint-placeholder-val="{{ false }}">
+        <div style="display:grid;grid-template-columns:minmax(0,1.55fr) minmax(74px,.75fr) minmax(74px,.75fr);gap:7px;position:relative;z-index:12">
+          <div style="position:relative;min-width:0">
+            <div onclick="{{ toggleReserveDate }}" style="min-height:44px;display:flex;align-items:center;gap:6px;background:rgba(255,255,255,.78);border:1px solid rgba(255,255,255,.66);border-radius:16px;padding:8px 10px;backdrop-filter:blur(18px);box-shadow:0 14px 30px rgba(52,86,40,.10);cursor:pointer">
+              <span style="flex:none;font-size:10px;font-weight:900;color:rgba(23,32,21,.56)">日期</span>
+              <span style="flex:1;min-width:0;font-size:12px;font-weight:900;color:#172015;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ selectedReserveDateShort }}</span>
+              <span style="flex:none;font-size:10px;font-weight:900;color:#4E7B36">{{ reserveDateArrow }}</span>
+            </div>
+            <sc-if value="{{ reserveDateOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;left:0;right:0;top:48px;background:rgba(255,255,255,.96);border:1px solid rgba(111,159,79,.22);border-radius:18px;padding:7px;display:flex;flex-direction:column;gap:4px;box-shadow:0 18px 44px rgba(52,86,40,.20);max-height:248px;overflow-y:auto">
+                <sc-for list="{{ reserveDateOptions }}" as="d" hint-placeholder-count="8">
+                  <div onclick="{{ d.pick }}" style="display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid {{ d.bd }};background:{{ d.bg }};color:{{ d.fg }};border-radius:13px;padding:10px 12px;font-size:13px;font-weight:850;cursor:pointer">
+                    <span>{{ d.label }}</span>
+                    <span style="font-size:11px;color:{{ d.subColor }}">{{ d.sub }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+          <div style="position:relative;min-width:0">
+            <div onclick="{{ toggleReserveStart }}" style="min-height:44px;display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.78);border:1px solid rgba(255,255,255,.66);border-radius:16px;padding:8px 9px;backdrop-filter:blur(18px);box-shadow:0 14px 30px rgba(52,86,40,.10);cursor:pointer">
+              <span style="flex:none;font-size:10px;font-weight:900;color:rgba(23,32,21,.56)">开始</span>
+              <span style="flex:1;min-width:0;font-size:13px;font-weight:900;color:#172015;white-space:nowrap">{{ selectedReserveStart }}</span>
+              <span style="flex:none;font-size:10px;font-weight:900;color:#4E7B36">{{ reserveStartArrow }}</span>
+            </div>
+            <sc-if value="{{ reserveStartOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;left:0;right:0;top:48px;background:rgba(255,255,255,.96);border:1px solid rgba(111,159,79,.22);border-radius:18px;padding:7px;display:flex;flex-direction:column;gap:4px;box-shadow:0 18px 44px rgba(52,86,40,.20);max-height:214px;overflow-y:auto">
+                <sc-for list="{{ reserveStartOptions }}" as="t" hint-placeholder-count="7">
+                  <div onclick="{{ t.pick }}" style="border:1px solid {{ t.bd }};background:{{ t.bg }};color:{{ t.fg }};border-radius:13px;padding:10px 12px;font-size:13px;font-weight:850;cursor:pointer">{{ t.label }}</div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+          <div style="position:relative;min-width:0">
+            <div onclick="{{ toggleReserveEnd }}" style="min-height:44px;display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.78);border:1px solid rgba(255,255,255,.66);border-radius:16px;padding:8px 9px;backdrop-filter:blur(18px);box-shadow:0 14px 30px rgba(52,86,40,.10);cursor:pointer">
+              <span style="flex:none;font-size:10px;font-weight:900;color:rgba(23,32,21,.56)">结束</span>
+              <span style="flex:1;min-width:0;font-size:13px;font-weight:900;color:#172015;white-space:nowrap">{{ selectedReserveEnd }}</span>
+              <span style="flex:none;font-size:10px;font-weight:900;color:#4E7B36">{{ reserveEndArrow }}</span>
+            </div>
+            <sc-if value="{{ reserveEndOpen }}" hint-placeholder-val="{{ false }}">
+              <div style="position:absolute;left:0;right:0;top:48px;background:rgba(255,255,255,.96);border:1px solid rgba(111,159,79,.22);border-radius:18px;padding:7px;display:flex;flex-direction:column;gap:4px;box-shadow:0 18px 44px rgba(52,86,40,.20);max-height:214px;overflow-y:auto">
+                <sc-for list="{{ reserveEndOptions }}" as="t" hint-placeholder-count="7">
+                  <div onclick="{{ t.pick }}" style="border:1px solid {{ t.bd }};background:{{ t.bg }};color:{{ t.fg }};border-radius:13px;padding:10px 12px;font-size:13px;font-weight:850;cursor:pointer">{{ t.label }}</div>
+                </sc-for>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ hasHomeSearch }}" hint-placeholder-val="{{ false }}">`,
+    'future mode reservation controls'
+  );
+
+  template = replaceOnce(
+    template,
+    `    const startText = startTimeText;
+    const timeText = startText + ' 起 · ' + durLabelText;`,
+    `    const startText = st.mode === 'now' ? '现在' : st.dateSel;
+    const timeText = startText + ' 起 · ' + st.durSel;`,
+    'time summary'
+  );
+
+  template = replaceOnce(
+    template,
+    `  <!-- ============ TIME SELECT ============ -->
+  <sc-if value="{{ stepTime }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="选择时段" style="position:absolute;inset:0;z-index:21;background:rgba(225,237,220,.72)">
+    <div style="position:absolute;left:0;right:0;bottom:0;background:rgba(255,255,255,.82);border-radius:22px 22px 0 0;padding:16px 18px 26px;display:flex;flex-direction:column;gap:16px;animation:sheetUp .25s">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <span onclick="{{ backDetail }}" style="font-size:13px;color:rgba(23,32,21,.55);cursor:pointer">‹ 返回</span>
+        <span style="font-size:15px;font-weight:800">选择停车时段</span>
+        <span style="width:40px"></span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:12px;font-weight:700;color:rgba(23,32,21,.6)">开始时间</span>
+          <span style="font-size:13px;font-weight:800;color:#6F9F4F">{{ startTimeText }}</span>
+        </div>
+        <sc-if value="{{ nowStart }}" hint-placeholder-val="{{ false }}">
+          <div style="background:rgba(111,159,79,.10);border:1px solid rgba(111,159,79,.24);border-radius:12px;padding:13px 14px;font-size:13px;font-weight:700;color:#3F5A2B;text-align:center">即时停 · 现在立即开始</div>
+        </sc-if>
+        <sc-if value="{{ showStartWheel }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <sc-for list="{{ startPresetChips }}" as="d" hint-placeholder-count="3">
+              <div onclick="{{ d.pick }}" style="padding:7px 12px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid {{ d.bd }};background:{{ d.bg }};color:{{ d.fg }}">{{ d.label }}</div>
+            </sc-for>
+          </div>
+          <div style="position:relative">
+            <div style="position:absolute;left:0;right:0;top:36px;height:36px;background:rgba(111,159,79,.10);border-top:1px solid rgba(111,159,79,.42);border-bottom:1px solid rgba(111,159,79,.42);border-radius:8px;pointer-events:none;z-index:2"></div>
+            <div style="display:flex;gap:4px;align-items:stretch">
+              <div data-wheel="startDay" style="flex:1.7;height:108px;overflow-y:auto;scroll-snap-type:y mandatory;position:relative;z-index:1">
+                <div style="height:36px"></div>
+                <sc-for list="{{ startDayItems }}" as="it" hint-placeholder-count="5"><div style="height:36px;line-height:36px;text-align:center;scroll-snap-align:center;font-size:{{ it.size }};font-weight:{{ it.weight }};color:{{ it.color }}">{{ it.label }}</div></sc-for>
+                <div style="height:36px"></div>
+              </div>
+              <div data-wheel="startHour" style="flex:1;height:108px;overflow-y:auto;scroll-snap-type:y mandatory;position:relative;z-index:1">
+                <div style="height:36px"></div>
+                <sc-for list="{{ startHourItems }}" as="it" hint-placeholder-count="5"><div style="height:36px;line-height:36px;text-align:center;scroll-snap-align:center;font-size:{{ it.size }};font-weight:{{ it.weight }};color:{{ it.color }}">{{ it.label }}</div></sc-for>
+                <div style="height:36px"></div>
+              </div>
+              <span style="flex:none;align-self:center;font-size:16px;font-weight:900;color:#172015">:</span>
+              <div data-wheel="startMin" style="flex:1;height:108px;overflow-y:auto;scroll-snap-type:y mandatory;position:relative;z-index:1">
+                <div style="height:36px"></div>
+                <sc-for list="{{ startMinItems }}" as="it" hint-placeholder-count="2"><div style="height:36px;line-height:36px;text-align:center;scroll-snap-align:center;font-size:{{ it.size }};font-weight:{{ it.weight }};color:{{ it.color }}">{{ it.label }}</div></sc-for>
+                <div style="height:36px"></div>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:12px;font-weight:700;color:rgba(23,32,21,.6)">停车时长</span>
+          <span style="font-size:13px;font-weight:800;color:#6F9F4F">{{ durLabelText }}</span>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <sc-for list="{{ durPresetChips }}" as="d" hint-placeholder-count="4">
+            <div onclick="{{ d.pick }}" style="padding:7px 12px;border-radius:999px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid {{ d.bd }};background:{{ d.bg }};color:{{ d.fg }}">{{ d.label }}</div>
+          </sc-for>
+        </div>
+        <div style="position:relative">
+          <div style="position:absolute;left:0;right:0;top:36px;height:36px;background:rgba(111,159,79,.10);border-top:1px solid rgba(111,159,79,.42);border-bottom:1px solid rgba(111,159,79,.42);border-radius:8px;pointer-events:none;z-index:2"></div>
+          <div data-wheel="dur" style="height:108px;overflow-y:auto;scroll-snap-type:y mandatory;position:relative;z-index:1">
+            <div style="height:36px"></div>
+            <sc-for list="{{ durItems }}" as="it" hint-placeholder-count="5"><div style="height:36px;line-height:36px;text-align:center;scroll-snap-align:center;font-size:{{ it.size }};font-weight:{{ it.weight }};color:{{ it.color }}">{{ it.label }}</div></sc-for>
+            <div style="height:36px"></div>
+          </div>
+        </div>
+      </div>
+      <div style="background:rgba(255,255,255,.62);border-radius:12px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:13px;color:rgba(23,32,21,.6)">{{ timeSummary }}</span>
+        <span style="font-size:17px;font-weight:800;color:#6F9F4F">{{ estPrice }}</span>
+      </div>
+      <div onclick="{{ toConfirm }}" style="background:#6F9F4F;color:#10110F;text-align:center;font-size:15px;font-weight:800;border-radius:14px;padding:15px 0;cursor:pointer" style-active="transform:scale(.98)">下一步 · 确认订单</div>
+    </div>
+  </div>
+  </sc-if>
+
+  `,
+    `  <!-- ============ TIME SELECT ============ -->
+  <sc-if value="{{ stepTime }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="选择时段" style="position:absolute;inset:0;z-index:21;background:rgba(225,237,220,.72)">
+    <div style="position:absolute;left:0;right:0;bottom:0;background:rgba(255,255,255,.82);border-radius:22px 22px 0 0;padding:16px 18px 26px;display:flex;flex-direction:column;gap:16px;animation:sheetUp .25s">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <span onclick="{{ backDetail }}" style="font-size:13px;color:rgba(23,32,21,.55);cursor:pointer">‹ 返回</span>
+        <span style="font-size:15px;font-weight:800">选择停车时段</span>
+        <span style="width:40px"></span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <span style="font-size:12px;font-weight:700;color:rgba(23,32,21,.6)">开始时间</span>
+        <div style="display:flex;gap:8px">
+          <sc-for list="{{ dateChips }}" as="d" hint-placeholder-count="3">
+            <div onclick="{{ d.pick }}" style="flex:1;text-align:center;padding:11px 0;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid {{ d.bd }};background:{{ d.bg }};color:{{ d.fg }}">{{ d.label }}</div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <span style="font-size:12px;font-weight:700;color:rgba(23,32,21,.6)">停车时长</span>
+        <div style="display:flex;gap:8px">
+          <sc-for list="{{ durChips }}" as="d" hint-placeholder-count="3">
+            <div onclick="{{ d.pick }}" style="flex:1;text-align:center;padding:11px 0;border-radius:12px;font-size:13px;font-weight:700;cursor:pointer;border:1px solid {{ d.bd }};background:{{ d.bg }};color:{{ d.fg }}">{{ d.label }}</div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="background:rgba(255,255,255,.62);border-radius:12px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:13px;color:rgba(23,32,21,.6)">{{ timeSummary }}</span>
+        <span style="font-size:17px;font-weight:800;color:#6F9F4F">{{ estPrice }}</span>
+      </div>
+      <div onclick="{{ toConfirm }}" style="background:#6F9F4F;color:#10110F;text-align:center;font-size:15px;font-weight:800;border-radius:14px;padding:15px 0;cursor:pointer" style-active="transform:scale(.98)">下一步 · 确认订单</div>
+    </div>
+  </div>
+  </sc-if>
+
+  `,
+    'time select sheet'
+  );
+
+  template = replaceOnce(
+    template,
+    `      // time select
+      stepTime: st.step === 'time',
+      showStartWheel: st.mode !== 'now', nowStart: st.mode === 'now',
+      startDayItems, startHourItems, startMinItems, durItems,
+      durPresetChips, startPresetChips, startTimeText, durLabelText,
+      backDetail: () => this.setState({ step: null }),
+      timeSummary: timeText,
+      estPrice: '预估 ¥' + total.toFixed(1),
+      toConfirm: () => this.setState({ step: 'confirm' }),`,
+    `      // time select
+      stepTime: st.step === 'time',
+      dateChips, durChips,
+      backDetail: () => this.setState({ step: null }),
+      timeSummary: timeText,
+      estPrice: '预估 ¥' + total.toFixed(1),
+      toConfirm: () => this.setState({ step: 'confirm' }),`,
+    'time select values'
+  );
+
+  template = replaceOnce(
+    template,
+    `        : [{ label: '停车费（' + durLabelText + '）', value: '¥' + park.toFixed(1), color: '#172015' }, { label: '平台服务费', value: '¥' + svc.toFixed(1), color: '#172015' }],`,
+    `        : [{ label: '停车费（' + st.durSel + '）', value: '¥' + park.toFixed(1), color: '#172015' }, { label: '平台服务费', value: '¥' + svc.toFixed(1), color: '#172015' }],`,
+    'fee duration label'
+  );
+
+  return template;
+}
+
+function patchCityPilotPlateStyle(template) {
+  return template.replace(
+    'font-size:14px;font-weight:800;background:#1F3A5F;border:1px solid #3D8BFF;border-radius:6px;padding:3px 10px',
+    'font-size:14px;font-weight:800;color:#172015'
+  );
+}
+
+function patchCityPilotPhotos(template) {
+  const replaceOnce = (source, from, to, label) => {
+    if (!source.includes(from)) {
+      console.warn('[citypilot-photos] patch target not found:', label);
+      return source;
+    }
+    return source.replace(from, to);
+  };
+
+  template = replaceOnce(
+    template,
+    `    const sizeName = (s) => ({ standard: '标准位', large: '大车位', bus: '大客车位' }[s.size] || '标准位');
+    const spots = list.map(s => {`,
+    `    const sizeName = (s) => ({ standard: '标准位', large: '大车位', bus: '大客车位' }[s.size] || '标准位');
+    const photoFor = (s) => {
+      const photoIndex = ((((s.id || 1) - 1) % 7) + 1);
+      return 'parking-images/spot-0' + (photoIndex === 6 ? 2 : photoIndex) + '.png';
+    };
+    const spots = list.map(s => {`,
+    'photoFor helper'
+  );
+
+  template = replaceOnce(
+    template,
+    `        smartLabel: inComm ? commShort(s) : sizeName(s),
+        smartDesc: inComm ? commTag(s) : [s.noSlope ? '无坡道' : '有坡道', sizeName(s), s.ev ? '充电桩' : '无充电', s.covered ? '室内' : '地面'].join(' · ')`,
+    `        smartLabel: inComm ? commShort(s) : sizeName(s),
+        photoBg: 'url("' + photoFor(s) + '")',
+        smartDesc: inComm ? commTag(s) : [s.noSlope ? '无坡道' : '有坡道', sizeName(s), s.ev ? '充电桩' : '无充电', s.covered ? '室内' : '地面'].join(' · ')`,
+    'spot photo background value'
+  );
+
+  template = replaceOnce(
+    template,
+    `          <div style="height:86px;background:radial-gradient(160px 80px at 25% 30%,rgba(111,159,79,.20),transparent 64%),repeating-linear-gradient(45deg,rgba(111,159,79,.08) 0 8px,rgba(255,255,255,.34) 8px 16px);display:flex;align-items:center;justify-content:center;position:relative">
+            <span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:rgba(23,32,21,.4)">车位实拍照片</span>
+            <sc-if value="{{ s.ev }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:8px;right:8px;font-size:10px;font-weight:700;white-space:nowrap;color:#6F9F4F;background:rgba(111,159,79,.12);border:1px solid rgba(111,159,79,.35);border-radius:5px;padding:2px 6px">⚡ 可充电</span></sc-if>
+          </div>`,
+    `          <div style="height:86px;background:#DCEBD5;background-image:{{ s.photoBg }};background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden">
+            <sc-if value="{{ s.ev }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:8px;right:8px;font-size:10px;font-weight:700;white-space:nowrap;color:#6F9F4F;background:rgba(111,159,79,.12);border:1px solid rgba(111,159,79,.35);border-radius:5px;padding:2px 6px">⚡ 可充电</span></sc-if>
+          </div>`,
+    'list card real photo'
+  );
+
+  template = replaceOnce(
+    template,
+    `      <div style="font-size:13px;color:rgba(23,32,21,.6)">{{ selAddr }}</div>
+      <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">`,
+    `      <div style="font-size:13px;color:rgba(23,32,21,.6)">{{ selAddr }}</div>
+      <div style="height:130px;border-radius:14px;background:#DCEBD5;background-image:{{ selPhotoBg }};background-size:cover;background-position:center;position:relative;overflow:hidden">
+        <sc-if value="{{ selEv }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:10px;right:10px;font-size:10px;font-weight:700;color:#6F9F4F;background:rgba(111,159,79,.14);border:1px solid rgba(111,159,79,.35);border-radius:6px;padding:3px 7px">⚡ 可充电</span></sc-if>
+      </div>
+      <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">`,
+    'detail sheet real photo'
+  );
+
+  template = replaceOnce(
+    template,
+    `      selBadgeBg: selC.bg, selBadgeFg: selC.fg,
+      selWindow: sel.window, selDist: sel.dist, selWalk: sel.walk, selCount: sel.count,`,
+    `      selBadgeBg: selC.bg, selBadgeFg: selC.fg,
+      selPhotoUrl: photoFor(sel),
+      selPhotoBg: 'url("' + photoFor(sel) + '")',
+      selWindow: sel.window, selDist: sel.dist, selWalk: sel.walk, selCount: sel.count,`,
+    'detail photo values'
+  );
+
+  return template;
+}
 
   </script>
 
