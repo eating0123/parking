@@ -21,6 +21,7 @@ public class OwnerRepository {
                 "name", stringOrDefault(input.get("name"), "新增共享车位"),
                 "window", stringOrDefault(input.get("window"), "工作日 08:30 - 18:00"),
                 "price", stringOrDefault(input.get("price"), "¥4 / 时"),
+                "photoName", stringOrDefault(input.get("photoName"), ""),
                 "status", "出租中"
         );
         DataStore.OWNER.put("spot", spot);

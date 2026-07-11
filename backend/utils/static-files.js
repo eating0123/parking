@@ -7,14 +7,16 @@ const mime = {
   ".css": "text/css; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".json": "application/json; charset=utf-8",
-  ".svg": "image/svg+xml; charset=utf-8"
+  ".svg": "image/svg+xml; charset=utf-8",
+  ".png": "image/png"
 };
 
 function createStaticHandler(frontendRoot) {
   const root = path.resolve(frontendRoot);
 
   return function serveStatic(req, res, url) {
-    const pathname = url.pathname === "/" ? "/index.html" : decodeURIComponent(url.pathname);
+    const rawPathname = url.pathname === "/" ? "/index.html" : decodeURIComponent(url.pathname);
+    const pathname = rawPathname.startsWith("/frontend/") ? rawPathname.slice("/frontend".length) : rawPathname;
     const filePath = path.normalize(path.join(root, pathname));
 
     if (!filePath.startsWith(root)) {

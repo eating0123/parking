@@ -8,7 +8,7 @@
     body { background: #E5ECE1; display: flex; align-items: center; justify-content: center; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
     #__bundler_loading { position: fixed; bottom: 20px; right: 20px; font: 13px/1.4 -apple-system, BlinkMacSystemFont, sans-serif; color: #666; background: #fff; padding: 8px 14px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.12); z-index: 10000; }
     #__bundler_thumbnail { position: fixed; inset: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #E5ECE1; z-index: 9999; }
-    #__bundler_thumbnail svg { width: 100%; height: 100%; object-fit: contain; }
+    #__bundler_thumbnail img { width: 100%; height: 100%; object-fit: cover; }
     #__bundler_placeholder { color: #999; font-size: 14px; }
   </style>
   <noscript>
@@ -20,11 +20,7 @@
 </head>
 <body>
   <div id="__bundler_thumbnail">
-  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
-    <rect width="1200" height="800" fill="#E5ECE1"></rect>
-    <rect x="480" y="280" width="240" height="240" rx="56" fill="#6F9F4F"></rect>
-    <text x="600" y="445" text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-size="150" font-weight="800" fill="#F7FBF4">P</text>
-  </svg>
+  <img src="/frontend/启动图.png" alt="CityPilot 可妙停启动图">
 </div>
   <div id="__bundler_loading">Unpacking...</div>
 
@@ -149,6 +145,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     template = patchCityPilotModeTabs(template);
     template = patchCityPilotPlateStyle(template);
     template = patchCityPilotPhotos(template);
+    template = patchCityPilotAddPhoto(template);
 
     const resourceScript = '<script>window.__resources = ' +
       JSON.stringify(resourceMap).replace(/<\//g, '<\\/') +
@@ -808,6 +805,46 @@ function patchCityPilotPhotos(template) {
   );
 
   return template;
+}
+
+function patchCityPilotAddPhoto(template) {
+  const from = `  startPhotoRecognize() {
+    this.setState({ photoStep: 'loading' });
+    setTimeout(() => {
+      this.setState({ photoStep: 'done' });
+      this.showToast('识别结果可编辑，请管理员确认后提交。');
+    }, 1500);
+  }`;
+  const to = `  startPhotoRecognize() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0';
+    input.onchange = () => {
+      const file = input.files && input.files[0];
+      input.remove();
+      if (!file) return;
+      if (!file.type || !file.type.startsWith('image/')) {
+        this.showToast('请选择车位照片');
+        return;
+      }
+      this.setState({ photoStep: 'loading', photoFileName: file.name });
+      const reader = new FileReader();
+      reader.onload = () => this.setState({ photoPreview: String(reader.result || '') });
+      reader.readAsDataURL(file);
+      setTimeout(() => {
+        this.setState({ photoStep: 'done' });
+        this.showToast('已选择 ' + file.name + '，识别结果可编辑。');
+      }, 1500);
+    };
+    document.body.appendChild(input);
+    input.click();
+  }`;
+  if (!template.includes(from)) {
+    console.warn('[citypilot-add-photo] patch target not found: startPhotoRecognize');
+    return template;
+  }
+  return template.replace(from, to);
 }
 
   </script>
