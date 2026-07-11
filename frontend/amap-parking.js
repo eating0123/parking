@@ -10,6 +10,8 @@
   let pickMarker = null;
   let pickedLngLat = null;
   let suppressNextMapClick = false;
+  let selectedAmapSpotId = null;
+  let lastFocusToken = 0;
 
   function toSpotList(value) {
     return (value || [])
@@ -111,9 +113,29 @@
   }
 
   function selectedSpotId() {
+    if (selectedAmapSpotId != null) return selectedAmapSpotId;
     const text = document.body ? document.body.textContent || "" : "";
     const selected = currentSpots().find(spot => text.includes(spot.name) && text.includes(spot.rule));
     return selected ? selected.id : null;
+  }
+
+  function spotById(id) {
+    const numericId = Number(id);
+    if (!Number.isFinite(numericId)) return null;
+    return currentSpots().find(spot => spot.id === numericId) || null;
+  }
+
+  function focusPadding(mapPane) {
+    const hostRect = mapHost && mapHost.getBoundingClientRect ? mapHost.getBoundingClientRect() : null;
+    const sheet = mapPane && mapPane.querySelector("[data-amap-spot-sheet]");
+    const sheetRect = sheet && sheet.getBoundingClientRect ? sheet.getBoundingClientRect() : null;
+    const compact = window.matchMedia && window.matchMedia("(max-width: 520px)").matches;
+    const height = hostRect && hostRect.height ? hostRect.height : window.innerHeight;
+    const bottom = sheetRect && sheetRect.height
+      ? Math.min(Math.round(height * 0.58), Math.round(sheetRect.height + (compact ? 112 : 84)))
+      : (compact ? 260 : 170);
+    const top = compact ? 150 : 92;
+    return [top, 32, bottom, 32];
   }
 
   function priceText(spot) {
@@ -166,6 +188,7 @@
     sheet.querySelector(".amap-spot-sheet-close").addEventListener("click", event => {
       event.preventDefault();
       event.stopPropagation();
+      selectedAmapSpotId = null;
       sheet.remove();
     });
     sheet.querySelector(".amap-spot-sheet-cta").addEventListener("click", event => {
@@ -195,6 +218,53 @@
     if (!target) return false;
     target.click();
     return true;
+  }
+
+  function isClickableSpotElement(el) {
+    if (!el || el.nodeType !== 1) return false;
+    const style = el.getAttribute("style") || "";
+    return el.matches("button,article,[role='button']")
+      || el.getAttribute("data-action") === "selectSpot"
+      || el.hasAttribute("onclick")
+      || style.includes("cursor:pointer");
+  }
+
+  function spotFromUiClick(target) {
+    if (!target || !target.closest) return null;
+    if (target.closest("[data-amap-real], [data-amap-spot-sheet], [data-map-control]")) return null;
+
+    const simple = target.closest('[data-action="selectSpot"][data-id]');
+    if (simple) return spotById(simple.getAttribute("data-id"));
+
+    const spots = currentSpots();
+    let el = target;
+    for (let depth = 0; el && el !== document.body && depth < 8; depth += 1, el = el.parentElement) {
+      if (!isClickableSpotElement(el)) continue;
+      const text = el.textContent || "";
+      const spot = spots.find(item => text.includes(item.name));
+      if (spot) return spot;
+    }
+    return null;
+  }
+
+  function syncFocusFromExternalSelection(spot) {
+    const mapPane = findMapPane();
+    if (!mapPane || !spot) return;
+    requestSpotFocus(mapPane, spot);
+    window.requestAnimationFrame(renderAmap);
+  }
+
+  function onExternalSpotClick(event) {
+    const spot = spotFromUiClick(event.target);
+    if (!spot) return;
+    window.setTimeout(() => syncFocusFromExternalSelection(spot), 0);
+    window.setTimeout(() => syncFocusFromExternalSelection(spot), 120);
+  }
+
+  function onExternalSpotEvent(event) {
+    const spot = spotById(event.detail && event.detail.id);
+    if (!spot) return;
+    window.setTimeout(() => syncFocusFromExternalSelection(spot), 0);
   }
 
   function clickBundledSpot(mapPane, spot) {
@@ -229,8 +299,32 @@
     }, 150);
   }
 
+  function focusSpotOnMap(spot, mapPane, marker) {
+    if (!map || !Number.isFinite(spot.lng) || !Number.isFinite(spot.lat)) return;
+    const token = ++lastFocusToken;
+    const zoom = Math.max(map.getZoom ? map.getZoom() : 15, 16);
+    const position = [spot.lng, spot.lat];
+    const applyFocus = () => {
+      if (token !== lastFocusToken || !map) return;
+      if (map.setZoomAndCenter) map.setZoomAndCenter(zoom, position);
+      if (marker && map.setFitView) {
+        map.setFitView([marker], false, focusPadding(mapPane), zoom);
+      }
+    };
+    applyFocus();
+    window.setTimeout(applyFocus, 80);
+    window.setTimeout(applyFocus, 220);
+  }
+
+  function requestSpotFocus(mapPane, spot) {
+    if (!spot) return;
+    selectedAmapSpotId = spot.id;
+    focusSpotOnMap(spot, mapPane);
+  }
+
   function clickSpot(mapPane, spot) {
     console.log("[citypilot-amap] select spot from marker", spot.id, spot.name);
+    requestSpotFocus(mapPane, spot);
     showSpotSheet(mapPane, spot);
     dispatchSelectSpot(spot);
     window.setTimeout(() => {
@@ -311,6 +405,7 @@
       map.clearMap();
       pickMarker = null;
       const activeId = selectedSpotId();
+      let activeMarker = null;
       const markers = list.map(spot => {
         const select = () => clickSpot(mapPane, spot);
         const marker = new AMap.Marker({
@@ -318,6 +413,7 @@
           anchor: "bottom-center",
           content: markerContent(spot, activeId === spot.id, select)
         });
+        if (activeId === spot.id) activeMarker = marker;
         marker.on("click", event => {
           if (event && event.originEvent) {
             event.originEvent.preventDefault();
@@ -332,7 +428,7 @@
         map.add(markers);
         const active = list.find(spot => activeId === spot.id);
         if (active) {
-          map.setZoomAndCenter(15, [active.lng, active.lat]);
+          focusSpotOnMap(active, mapPane, activeMarker);
         } else if (markers.length === 1) {
           map.setZoomAndCenter(15, markers[0].getPosition());
         } else {
@@ -356,6 +452,8 @@
 
   function boot() {
     fetchSpots().finally(renderAmap);
+    document.addEventListener("click", onExternalSpotClick, true);
+    window.addEventListener("citypilot:select-spot", onExternalSpotEvent);
     observer.observe(document.body, { childList: true, subtree: true });
   }
 
