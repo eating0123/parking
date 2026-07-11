@@ -472,6 +472,10 @@ function patchCityPilotModeTabs(template) {
     const selectedReserveDateObj = new Date(selectedReserveDateValue + 'T00:00:00');
     const selectedReserveDate = st.reserveDateLabel || reserveDateLabel(selectedReserveDateObj);
     const selectedReserveDateShort = (selectedReserveDateObj.getMonth() + 1) + '月' + selectedReserveDateObj.getDate() + '日 ' + reserveWeekday[selectedReserveDateObj.getDay()];
+    const selectedMonthlyStartDateValue = st.monthlyStartDateValue || defaultReserveDate.value;
+    const selectedMonthlyStartDateObj = new Date(selectedMonthlyStartDateValue + 'T00:00:00');
+    const selectedMonthlyStartDateLabel = st.monthlyStartDateLabel || reserveDateLabel(selectedMonthlyStartDateObj);
+    const selectedMonthlyStartDateShort = (selectedMonthlyStartDateObj.getMonth() + 1) + '月' + selectedMonthlyStartDateObj.getDate() + '日 ' + reserveWeekday[selectedMonthlyStartDateObj.getDay()];
     const reserveToMin = (t) => {
       const p = String(t || '00:00').split(':').map(Number);
       return p[0] * 60 + p[1];
@@ -505,7 +509,8 @@ function patchCityPilotModeTabs(template) {
         step: null,
         reserveDateOpen: false,
         reserveStartOpen: false,
-        reserveEndOpen: false
+        reserveEndOpen: false,
+        monthlyStartDateOpen: false
       })
     }, chip(st.mode === m.key)));
 
@@ -533,6 +538,18 @@ function patchCityPilotModeTabs(template) {
       label: t,
       pick: () => this.setState({ mode: 'future', reserveEnd: t, dateSel: composeReserveDateSel(selectedReserveDate, selectedReserveStart, t), durSel: reserveDurationText(selectedReserveStart, t), spotId: null, reserveEndOpen: false })
     }, chip(selectedReserveEnd === t)));
+    const monthlyStartDateOptions = reserveDateRaw.map(d => {
+      const active = selectedMonthlyStartDateValue === d.value;
+      return {
+        label: d.label,
+        sub: d.sub,
+        bg: active ? 'rgba(111,159,79,.16)' : 'rgba(255,255,255,.76)',
+        bd: active ? 'rgba(111,159,79,.58)' : 'rgba(111,159,79,.12)',
+        fg: active ? '#172015' : 'rgba(23,32,21,.72)',
+        subColor: active ? '#4E7B36' : 'rgba(23,32,21,.42)',
+        pick: () => this.setState({ monthlyStartDateValue: d.value, monthlyStartDateLabel: d.label, monthlyStartDateOpen: false })
+      };
+    });
 
     const dateOpts = st.mode === 'future' ? [reserveDateSel] : ['现在'];
     const dateChips = dateOpts.map(d => Object.assign({ label: d, pick: () => this.setState({ dateSel: d, durIdx: null }) }, chip(st.dateSel === d || (dateOpts.length === 1))));
@@ -728,6 +745,36 @@ function patchCityPilotModeTabs(template) {
 
   template = replaceOnce(
     template,
+    `        <div style="font-size:13px;color:rgba(23,32,21,.6)">{{ confirmTimeText }}</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(255,255,255,.07);padding-top:10px">`,
+    `        <div style="font-size:13px;color:rgba(23,32,21,.6)">{{ confirmTimeText }}</div>
+        <sc-if value="{{ isMonthlyPass }}" hint-placeholder-val="{{ false }}">
+        <div style="position:relative;border-top:1px solid rgba(255,255,255,.07);padding-top:10px">
+          <div onclick="{{ toggleMonthlyStartDate }}" style="display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid rgba(111,159,79,.20);background:rgba(111,159,79,.08);border-radius:12px;padding:11px 12px;cursor:pointer">
+            <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+              <span style="font-size:12px;font-weight:700;color:rgba(23,32,21,.56)">开始日期</span>
+              <span style="font-size:14px;font-weight:900;color:#172015;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ monthlyStartDateLabel }}</span>
+            </div>
+            <span style="flex:none;font-size:12px;font-weight:900;color:#4E7B36">{{ monthlyStartDateArrow }}</span>
+          </div>
+          <sc-if value="{{ monthlyStartDateOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="position:absolute;left:0;right:0;top:64px;z-index:4;background:rgba(255,255,255,.96);border:1px solid rgba(111,159,79,.22);border-radius:16px;padding:7px;display:flex;flex-direction:column;gap:4px;box-shadow:0 18px 44px rgba(52,86,40,.20);max-height:248px;overflow-y:auto">
+              <sc-for list="{{ monthlyStartDateOptions }}" as="d" hint-placeholder-count="8">
+                <div onclick="{{ d.pick }}" style="display:flex;align-items:center;justify-content:space-between;gap:10px;border:1px solid {{ d.bd }};background:{{ d.bg }};color:{{ d.fg }};border-radius:12px;padding:10px 12px;font-size:13px;font-weight:850;cursor:pointer">
+                  <span>{{ d.label }}</span>
+                  <span style="font-size:11px;color:{{ d.subColor }}">{{ d.sub }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+        </sc-if>
+        <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid rgba(255,255,255,.07);padding-top:10px">`,
+    'monthly start date picker'
+  );
+
+  template = replaceOnce(
+    template,
     `      // time select
       stepTime: st.step === 'time',
       showStartWheel: st.mode !== 'now', nowStart: st.mode === 'now',
@@ -753,6 +800,26 @@ function patchCityPilotModeTabs(template) {
     `        : [{ label: '停车费（' + durLabelText + '）', value: '¥' + park.toFixed(1), color: '#172015' }, { label: '平台服务费', value: '¥' + svc.toFixed(1), color: '#172015' }],`,
     `        : [{ label: '停车费（' + st.durSel + '）', value: '¥' + park.toFixed(1), color: '#172015' }, { label: '平台服务费', value: '¥' + svc.toFixed(1), color: '#172015' }],`,
     'fee duration label'
+  );
+
+  template = replaceOnce(
+    template,
+    `      // confirm
+      stepConfirm: st.step === 'confirm',
+      confirmName: sel.name, confirmBadge: sel.badge,
+      confirmTimeText: monthly ? '社区错峰包月 · 19:00–9:00 · 30 天' : timeText,`,
+    `      // confirm
+      stepConfirm: st.step === 'confirm',
+      confirmName: sel.name, confirmBadge: sel.badge,
+      isMonthlyPass: monthly,
+      monthlyStartDateLabel: selectedMonthlyStartDateLabel,
+      monthlyStartDateShort: selectedMonthlyStartDateShort,
+      monthlyStartDateOpen: !!st.monthlyStartDateOpen,
+      monthlyStartDateArrow: st.monthlyStartDateOpen ? '⌃' : '⌄',
+      monthlyStartDateOptions,
+      toggleMonthlyStartDate: () => this.setState(s => ({ monthlyStartDateOpen: !s.monthlyStartDateOpen, reserveDateOpen: false, reserveStartOpen: false, reserveEndOpen: false })),
+      confirmTimeText: monthly ? '社区错峰包月 · 19:00–9:00 · 30 天' : timeText,`,
+    'monthly confirm values'
   );
 
   return template;
