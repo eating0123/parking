@@ -8,6 +8,7 @@ function createApiRouter() {
 
   router.get("/api/health", healthController.health);
   router.get("/api/spots", parkingController.listSpots);
+  router.get("/api/search", parkingController.searchSpots);
   router.get("/api/orders", parkingController.listOrders);
   router.post("/api/recommend", parkingController.recommend);
   router.post("/api/bookings", parkingController.createBooking);

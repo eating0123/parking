@@ -1,5 +1,6 @@
 package com.citypilot.parking;
 
+import com.citypilot.parking.controllers.CommunityController;
 import com.citypilot.parking.controllers.HealthController;
 import com.citypilot.parking.controllers.OwnerController;
 import com.citypilot.parking.controllers.ParkingController;
@@ -9,9 +10,11 @@ import com.citypilot.parking.http.StaticFileHandler;
 import com.citypilot.parking.repositories.OwnerRepository;
 import com.citypilot.parking.repositories.ParkingRepository;
 import com.citypilot.parking.services.BookingService;
+import com.citypilot.parking.services.CommunityService;
 import com.citypilot.parking.services.OwnerService;
 import com.citypilot.parking.services.PricingService;
 import com.citypilot.parking.services.RecommendationService;
+import com.citypilot.parking.services.SearchService;
 import com.sun.net.httpserver.HttpServer;
 
 import java.io.IOException;
@@ -30,18 +33,27 @@ public class CityPilotApplication {
         PricingService pricingService = new PricingService();
         RecommendationService recommendationService = new RecommendationService(parkingRepository, pricingService);
         BookingService bookingService = new BookingService(parkingRepository, pricingService);
+        SearchService searchService = new SearchService(parkingRepository);
         OwnerService ownerService = new OwnerService(ownerRepository);
+        CommunityService communityService = new CommunityService(parkingRepository);
 
         HealthController healthController = new HealthController();
-        ParkingController parkingController = new ParkingController(parkingRepository, recommendationService, bookingService);
+        ParkingController parkingController = new ParkingController(parkingRepository, recommendationService, bookingService, searchService);
         OwnerController ownerController = new OwnerController(ownerService);
+        CommunityController communityController = new CommunityController(communityService);
 
         ApiRouter router = new ApiRouter();
         router.get("/api/health", healthController::health);
         router.get("/api/spots", parkingController::listSpots);
+        router.get("/api/search", parkingController::searchSpots);
         router.get("/api/orders", parkingController::listOrders);
         router.post("/api/recommend", parkingController::recommend);
         router.post("/api/bookings", parkingController::createBooking);
+        router.get("/api/community", communityController::listDistricts);
+        router.get("/api/community/districts", communityController::listDistricts);
+        router.get("/api/community/locate", communityController::locateByQuery);
+        router.get("/api/community/spots", communityController::listDistrictSpots);
+        router.post("/api/community/locate", communityController::locate);
         router.get("/api/owner", ownerController::getOwner);
         router.patch("/api/owner/rent-status", ownerController::updateRentStatus);
         router.post("/api/owner/spots", ownerController::createOwnerSpot);

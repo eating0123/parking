@@ -5,6 +5,7 @@ import com.citypilot.parking.http.RequestBodies;
 import com.citypilot.parking.repositories.ParkingRepository;
 import com.citypilot.parking.services.BookingService;
 import com.citypilot.parking.services.RecommendationService;
+import com.citypilot.parking.services.SearchService;
 import com.citypilot.parking.utils.BackendLog;
 import com.sun.net.httpserver.HttpExchange;
 
@@ -18,17 +19,30 @@ public class ParkingController {
     private final ParkingRepository parkingRepository;
     private final RecommendationService recommendationService;
     private final BookingService bookingService;
+    private final SearchService searchService;
 
-    public ParkingController(ParkingRepository parkingRepository, RecommendationService recommendationService, BookingService bookingService) {
+    public ParkingController(ParkingRepository parkingRepository, RecommendationService recommendationService, BookingService bookingService, SearchService searchService) {
         this.parkingRepository = parkingRepository;
         this.recommendationService = recommendationService;
         this.bookingService = bookingService;
+        this.searchService = searchService;
     }
 
     public void listSpots(HttpExchange exchange) throws IOException {
         List<Map<String, Object>> spots = parkingRepository.listSpots();
         BackendLog.beforeReturn(exchange, "listSpots", "spots=" + spots.size());
         HttpResponses.json(exchange, 200, object("spots", spots));
+    }
+
+    public void searchSpots(HttpExchange exchange) throws IOException {
+        try {
+            Map<String, Object> result = searchService.search(exchange.getRequestURI().getRawQuery());
+            BackendLog.beforeReturn(exchange, "searchSpots", "source=" + result.get("source"));
+            HttpResponses.json(exchange, 200, result);
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            HttpResponses.json(exchange, 500, HttpResponses.error("search interrupted"));
+        }
     }
 
     public void listOrders(HttpExchange exchange) throws IOException {

@@ -15,6 +15,8 @@ const spots = [
     monthly: 168,
     x: 28,
     y: 43,
+    lng: 116.323627,
+    lat: 39.754978,
     noSlope: true,
     size: "standard",
     covered: false,
@@ -39,6 +41,8 @@ const spots = [
     monthly: 168,
     x: 57,
     y: 29,
+    lng: 116.325575,
+    lat: 39.789617,
     noSlope: true,
     size: "large",
     covered: true,
@@ -63,6 +67,8 @@ const spots = [
     monthly: 0,
     x: 43,
     y: 56,
+    lng: 116.337675,
+    lat: 39.768375,
     noSlope: false,
     size: "standard",
     covered: false,
@@ -87,6 +93,8 @@ const spots = [
     monthly: 198,
     x: 73,
     y: 61,
+    lng: 116.299709,
+    lat: 39.687555,
     noSlope: true,
     size: "bus",
     covered: true,
@@ -111,6 +119,8 @@ const spots = [
     monthly: 0,
     x: 22,
     y: 68,
+    lng: 116.339263,
+    lat: 39.736353,
     noSlope: true,
     size: "large",
     covered: false,
@@ -135,6 +145,8 @@ const spots = [
     monthly: 168,
     x: 64,
     y: 24,
+    lng: 116.328779,
+    lat: 39.724224,
     noSlope: true,
     size: "large",
     covered: true,
@@ -179,7 +191,7 @@ const owner = {
 
 const bookings = [];
 
-export async function onRequest({ request }) {
+export async function onRequest({ request, env }) {
   try {
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/+$/, "") || "/";
@@ -188,6 +200,7 @@ export async function onRequest({ request }) {
     if (method === "OPTIONS") return empty(204);
     if (method === "GET" && path === "/api/health") return json({ ok: true, service: "citypilot-parking-api", version: "0.1.0", runtime: "cloudflare-pages-functions" });
     if (method === "GET" && path === "/api/spots") return json({ spots });
+    if (method === "GET" && path === "/api/search") return json(await searchParking(url.searchParams, env));
     if (method === "GET" && path === "/api/orders") return json({ orders, bookings });
     if (method === "POST" && path === "/api/recommend") return json(recommendParkingSpot(await readJson(request)));
     if (method === "POST" && path === "/api/bookings") return json({ booking: createBooking(await readJson(request)) }, 201);
@@ -199,6 +212,120 @@ export async function onRequest({ request }) {
   } catch (error) {
     return json({ error: error.message || "Internal Server Error", details: error.details }, error.status || 500);
   }
+}
+
+async function searchParking(params, env = {}) {
+  const query = String(params.get("q") || params.get("keyword") || "").trim();
+  if (!query) return { query, pois: [], spots, source: "empty" };
+
+  const localMatches = searchLocalSpots(query);
+  const key = env.AMAP_WEB_SERVICE_KEY || env.AMAP_REST_KEY || env.AMAP_KEY;
+  if (!key) {
+    return {
+      query,
+      pois: [],
+      spots: localMatches,
+      source: "local",
+      warning: "AMAP_WEB_SERVICE_KEY is not configured"
+    };
+  }
+
+  const city = String(params.get("city") || "北京").trim();
+  const api = new URL("https://restapi.amap.com/v3/place/text");
+  api.searchParams.set("key", key);
+  api.searchParams.set("keywords", query);
+  api.searchParams.set("city", city);
+  api.searchParams.set("citylimit", "false");
+  api.searchParams.set("offset", "20");
+  api.searchParams.set("page", "1");
+  api.searchParams.set("extensions", "base");
+
+  const upstream = await fetch(api.toString(), {
+    headers: { "Accept": "application/json" }
+  });
+  if (!upstream.ok) throw appError(502, "AMap search request failed", { status: upstream.status });
+
+  const payload = await upstream.json();
+  if (payload.status !== "1") {
+    throw appError(502, "AMap search failed", { info: payload.info, infocode: payload.infocode });
+  }
+
+  const pois = (payload.pois || [])
+    .map(normalizePoi)
+    .filter(Boolean);
+  const ranked = rankSpotsByPois(pois, localMatches);
+
+  return {
+    query,
+    pois,
+    spots: ranked,
+    source: "amap"
+  };
+}
+
+function normalizePoi(poi) {
+  const [lng, lat] = String(poi.location || "").split(",").map(Number);
+  if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+  return {
+    id: poi.id,
+    name: poi.name,
+    address: Array.isArray(poi.address) ? poi.address.join("") : String(poi.address || ""),
+    type: poi.type,
+    district: poi.adname,
+    lng,
+    lat
+  };
+}
+
+function searchLocalSpots(query) {
+  const q = normalizeText(query);
+  return spots.filter(spot => normalizeText([
+    spot.name,
+    spot.addr,
+    spot.badge,
+    spot.rule,
+    spot.window,
+    spot.ev ? "充电 新能源 电车 ev" : "",
+    spot.noSlope ? "无坡道 老人 电梯" : "",
+    spot.covered ? "室内 地下 遮雨" : "",
+    spot.rate === 0 ? "免费 0元 不收费" : "",
+    spot.monthly > 0 ? "月卡 包月" : "",
+    sizeLabel(spot.size)
+  ].join(" ")).includes(q));
+}
+
+function rankSpotsByPois(pois, localMatches) {
+  if (!pois.length) return localMatches;
+  const byId = new Map();
+  localMatches.forEach(spot => byId.set(spot.id, spot));
+
+  spots
+    .map(spot => {
+      const nearest = Math.min(...pois.map(poi => geoDistanceMeters(spot.lng, spot.lat, poi.lng, poi.lat)));
+      return { spot, nearest };
+    })
+    .filter(item => item.nearest <= 5000)
+    .sort((a, b) => a.nearest - b.nearest)
+    .forEach(item => byId.set(item.spot.id, {
+      ...item.spot,
+      searchDistance: Math.round(item.nearest)
+    }));
+
+  return Array.from(byId.values());
+}
+
+function geoDistanceMeters(lng1, lat1, lng2, lat2) {
+  const toRad = value => value * Math.PI / 180;
+  const earth = 6371000;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return earth * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function normalizeText(value) {
+  return String(value || "").toLowerCase().replace(/\s+/g, "");
 }
 
 async function readJson(request) {
