@@ -2,13 +2,13 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Bundled Page</title>
+  <title>可妙停</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #E5ECE1; display: flex; align-items: center; justify-content: center; min-height: 100vh; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
     #__bundler_loading { position: fixed; bottom: 20px; right: 20px; font: 13px/1.4 -apple-system, BlinkMacSystemFont, sans-serif; color: #666; background: #fff; padding: 8px 14px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.12); z-index: 10000; }
     #__bundler_thumbnail { position: fixed; inset: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: #E5ECE1; z-index: 9999; }
-    #__bundler_thumbnail img { width: 100%; height: 100%; object-fit: cover; }
+    #__bundler_thumbnail svg { width: 100%; height: 100%; object-fit: contain; }
     #__bundler_placeholder { color: #999; font-size: 14px; }
   </style>
   <noscript>
@@ -20,7 +20,11 @@
 </head>
 <body>
   <div id="__bundler_thumbnail">
-  <img src="启动图.png" alt="">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#E5ECE1"></rect>
+    <rect x="480" y="280" width="240" height="240" rx="56" fill="#6F9F4F"></rect>
+    <text x="600" y="445" text-anchor="middle" font-family="Helvetica,Arial,sans-serif" font-size="150" font-weight="800" fill="#F7FBF4">P</text>
+  </svg>
 </div>
   <div id="__bundler_loading">Unpacking...</div>
 
@@ -146,6 +150,9 @@ document.addEventListener('DOMContentLoaded', async function() {
     template = patchCityPilotPlateStyle(template);
     template = patchCityPilotPhotos(template);
     template = patchCityPilotAddPhoto(template);
+    template = patchCityPilotRemoveListView(template);
+    template = patchCityPilotCompactHomeHeader(template);
+    template = patchCityPilotPageTitle(template);
 
     const resourceScript = '<script>window.__resources = ' +
       JSON.stringify(resourceMap).replace(/<\//g, '<\\/') +
@@ -260,7 +267,7 @@ function patchCityPilotSearch(template) {
     this._homeSearchReady = true;
     const commit = (value) => {
       const next = String(value || '').trim();
-      if (next === (this.state.homeSearch || '')) return;
+      if (next === (this.state.homeSearch || '') && this.state.searchLoading) return;
       this.applyHomeSearch(next);
     };
     const onInput = (e) => {
@@ -280,11 +287,25 @@ function patchCityPilotSearch(template) {
         e.preventDefault();
       }
     };
+    const onClick = (e) => {
+      const target = e.target && e.target.closest ? e.target.closest('[data-home-search-trigger],[data-home-clear]') : null;
+      if (!target) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (target.matches('[data-home-clear]')) {
+        this.clearHomeSearch();
+        return;
+      }
+      const el = document.querySelector('[data-home-search]');
+      commit((el && el.value) || this._homeSearchDraft || this.state.homeSearch || '');
+    };
     document.addEventListener('input', onInput);
     document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('click', onClick, true);
     this._homeSearchCleanup = () => {
       document.removeEventListener('input', onInput);
       document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('click', onClick, true);
     };
   }
 
@@ -298,7 +319,10 @@ function patchCityPilotSearch(template) {
     }
     this.setState({ homeSearch: text, searchLoading: true, searchError: '', spotId: null, step: null });
     try {
-      const res = await fetch('/api/search?q=' + encodeURIComponent(text));
+      const res = await fetch('/api/search?q=' + encodeURIComponent(text) + '&city=' + encodeURIComponent('北京'), {
+        headers: { 'Accept': 'application/json' },
+        cache: 'no-store'
+      });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
       this.setState({
@@ -311,8 +335,8 @@ function patchCityPilotSearch(template) {
         step: null
       });
     } catch (error) {
-      console.warn('[citypilot-search] /api/search failed, falling back to local filter:', error);
-      this.setState({ homeSearch: text, searchSpots: null, searchSource: 'local-fallback', searchLoading: false, searchError: '接口不可用，已使用本地筛选', spotId: null, step: null });
+      console.warn('[citypilot-search] /api/search failed:', error);
+      this.setState({ homeSearch: text, searchSpots: [], searchSource: 'api', searchLoading: false, searchError: '搜索接口请求失败', spotId: null, step: null });
     }
   }
 
@@ -845,6 +869,74 @@ function patchCityPilotAddPhoto(template) {
     return template;
   }
   return template.replace(from, to);
+}
+
+function patchCityPilotRemoveListView(template) {
+  const replaceOnce = (source, from, to, label) => {
+    if (!source.includes(from)) {
+      console.warn('[citypilot-remove-list] patch target not found:', label);
+      return source;
+    }
+    return source.replace(from, to);
+  };
+
+  template = replaceOnce(
+    template,
+    `        <div onclick="{{ toggleView }}" style="flex:none;background:rgba(255,255,255,.9);border:1px solid rgba(255,255,255,.75);color:#10110F;border-radius:18px;padding:11px 14px;font-size:13px;font-weight:800;cursor:pointer;box-shadow:0 14px 34px rgba(0,0,0,.22)">{{ viewToggleLabel }}</div>
+`,
+    '',
+    'home view toggle'
+  );
+
+  const listStart = template.indexOf('    <!-- LIST VIEW -->');
+  const ownerMarker = '  <!-- ============ OWNER 我要出租 ============ -->';
+  if (listStart < 0) {
+    console.warn('[citypilot-remove-list] patch target not found: list view block');
+  } else {
+    const ownerStart = template.indexOf(ownerMarker, listStart);
+    if (ownerStart < 0) {
+      console.warn('[citypilot-remove-list] patch target not found: owner section marker');
+    } else {
+      template = template.slice(0, listStart) + '  </div>\n  </sc-if>\n\n' + template.slice(ownerStart);
+    }
+  }
+
+  template = replaceOnce(
+    template,
+    `      isMap: st.view === 'map' && !(inComm && st.commStage !== 'done'), isList: st.view === 'list' && !(inComm && st.commStage !== 'done'),
+      viewToggleLabel: st.view === 'map' ? '☰ 列表' : '◈ 地图',
+      toggleView: () => this.setState(s => ({ view: s.view === 'map' ? 'list' : 'map' })),
+      mapGridSize, mapCanvasW, mapCanvasH,`,
+    `      isMap: !(inComm && st.commStage !== 'done'), isList: false,
+      mapGridSize, mapCanvasW, mapCanvasH,`,
+    'view state values'
+  );
+
+  return template;
+}
+
+function patchCityPilotCompactHomeHeader(template) {
+  const from = `    <div style="padding:58px 16px 10px;display:flex;flex-direction:column;gap:10px;background:linear-gradient(rgba(246,251,243,.96) 72%,rgba(246,251,243,0));z-index:5">`;
+  const to = `    <div style="padding:16px 16px 10px;display:flex;flex-direction:column;gap:10px;background:linear-gradient(rgba(246,251,243,.96) 72%,rgba(246,251,243,0));z-index:5">`;
+  if (!template.includes(from)) {
+    console.warn('[citypilot-compact-header] patch target not found: home header padding');
+    return template;
+  }
+  return template.replace(from, to);
+}
+
+function patchCityPilotPageTitle(template) {
+  const title = '<title>可妙停</title>';
+  if (/<title>[\s\S]*?<\/title>/i.test(template)) {
+    return template.replace(/<title>[\s\S]*?<\/title>/i, title);
+  }
+  const headOpen = template.match(/<head[^>]*>/i);
+  if (!headOpen) {
+    console.warn('[citypilot-page-title] patch target not found: head');
+    return template;
+  }
+  const i = headOpen.index + headOpen[0].length;
+  return template.slice(0, i) + '\n' + title + template.slice(i);
 }
 
   </script>
