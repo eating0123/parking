@@ -9,6 +9,7 @@
   let mapHost = null;
   let pickMarker = null;
   let pickedLngLat = null;
+  let suppressNextMapClick = false;
 
   function toSpotList(value) {
     return (value || [])
@@ -64,11 +65,24 @@
     style.textContent = `
       [data-amap-real] { position:absolute; inset:0; z-index:1; background:#e8f0e4; }
       .map [data-amap-real] { z-index:1; }
-      .amap-parking-pin { transform:translateY(-4px); display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer; }
-      .amap-parking-label { min-width:46px; padding:5px 8px; border-radius:999px; border:1px solid rgba(111,159,79,.45); background:rgba(255,255,255,.92); color:#172015; box-shadow:0 8px 18px rgba(23,32,21,.18); font-size:11px; font-weight:900; line-height:1; white-space:nowrap; text-align:center; }
+      .amap-parking-pin { transform:translateY(-4px); display:flex; flex-direction:column; align-items:center; gap:2px; cursor:pointer; border:0; padding:0; background:transparent; font:inherit; touch-action:manipulation; pointer-events:auto; }
+      .amap-parking-label { min-width:46px; padding:5px 8px; border-radius:999px; border:1px solid rgba(111,159,79,.45); background:rgba(255,255,255,.92); color:#172015; box-shadow:0 8px 18px rgba(23,32,21,.18); font-size:11px; font-weight:900; line-height:1; white-space:nowrap; text-align:center; pointer-events:none; }
       .amap-parking-pin.active .amap-parking-label { background:#6F9F4F; border-color:#6F9F4F; color:#10110F; }
-      .amap-parking-dot { width:8px; height:8px; border-radius:50%; background:#6F9F4F; border:1px solid rgba(255,255,255,.9); box-shadow:0 4px 10px rgba(23,32,21,.24); }
+      .amap-parking-dot { width:8px; height:8px; border-radius:50%; background:#6F9F4F; border:1px solid rgba(255,255,255,.9); box-shadow:0 4px 10px rgba(23,32,21,.24); pointer-events:none; }
       .amap-picked-label { padding:5px 9px; border-radius:999px; background:#172015; color:#fff; font-size:11px; font-weight:900; box-shadow:0 8px 18px rgba(23,32,21,.24); }
+      .amap-spot-sheet { position:absolute; left:12px; right:12px; bottom:84px; z-index:12; padding:14px; border-radius:22px; border:1px solid rgba(255,255,255,.72); background:rgba(255,255,255,.94); color:#172015; box-shadow:0 18px 44px rgba(52,86,40,.24); backdrop-filter:blur(18px); display:flex; flex-direction:column; gap:10px; font-family:-apple-system,'PingFang SC',system-ui,sans-serif; }
+      .amap-spot-sheet-head { display:flex; align-items:flex-start; gap:10px; }
+      .amap-spot-sheet-title { flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
+      .amap-spot-sheet-name { font-size:16px; font-weight:900; line-height:1.25; color:#172015; }
+      .amap-spot-sheet-addr { font-size:11px; line-height:1.45; color:rgba(23,32,21,.58); }
+      .amap-spot-sheet-price { flex:none; font-size:17px; font-weight:950; color:#4E7B36; white-space:nowrap; }
+      .amap-spot-sheet-close { flex:none; width:28px; height:28px; border:0; border-radius:50%; background:rgba(23,32,21,.08); color:rgba(23,32,21,.58); font-size:18px; line-height:28px; font-weight:800; cursor:pointer; padding:0; }
+      .amap-spot-sheet-facts { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; }
+      .amap-spot-sheet-fact { border-radius:13px; background:rgba(111,159,79,.10); border:1px solid rgba(111,159,79,.18); padding:8px 9px; display:flex; flex-direction:column; gap:3px; min-width:0; }
+      .amap-spot-sheet-fact span { font-size:10px; color:rgba(23,32,21,.52); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .amap-spot-sheet-fact b { font-size:12px; color:#172015; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+      .amap-spot-sheet-rule { font-size:11px; line-height:1.5; color:rgba(23,32,21,.68); background:rgba(23,32,21,.04); border-radius:12px; padding:8px 10px; }
+      .amap-spot-sheet-cta { width:100%; border:0; border-radius:14px; padding:12px 0; background:#6F9F4F; color:#10110F; font-size:14px; font-weight:900; cursor:pointer; }
       .amap-parking-error { position:absolute; left:18px; right:18px; top:45%; transform:translateY(-50%); padding:12px 14px; border-radius:16px; background:rgba(255,255,255,.92); color:#172015; font-size:12px; font-weight:800; text-align:center; box-shadow:0 12px 28px rgba(52,86,40,.14); z-index:2; }
     `;
     document.head.appendChild(style);
@@ -107,32 +121,124 @@
     return "¥" + spot.rate;
   }
 
-  function markerContent(spot, active) {
-    return `
-      <div class="amap-parking-pin ${active ? "active" : ""}">
-        <div class="amap-parking-label">${priceText(spot)}</div>
-        <div class="amap-parking-dot"></div>
+  function escapeHtml(value) {
+    return String(value == null ? "" : value).replace(/[&<>"']/g, char => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    })[char]);
+  }
+
+  function sheetPriceText(spot) {
+    if (Number(spot.rate) === 0) return "免费";
+    return "¥" + spot.rate + "/时";
+  }
+
+  function showSpotSheet(mapPane, spot) {
+    if (!mapPane) return;
+    let sheet = mapPane.querySelector("[data-amap-spot-sheet]");
+    if (!sheet) {
+      sheet = document.createElement("div");
+      sheet.setAttribute("data-amap-spot-sheet", "1");
+      sheet.className = "amap-spot-sheet";
+      sheet.addEventListener("click", event => event.stopPropagation());
+      mapPane.appendChild(sheet);
+    }
+    sheet.innerHTML = `
+      <div class="amap-spot-sheet-head">
+        <div class="amap-spot-sheet-title">
+          <div class="amap-spot-sheet-name">${escapeHtml(spot.name)}</div>
+          <div class="amap-spot-sheet-addr">${escapeHtml(spot.addr || spot.badge || "社区共享车位")}</div>
+        </div>
+        <div class="amap-spot-sheet-price">${escapeHtml(sheetPriceText(spot))}</div>
+        <button type="button" class="amap-spot-sheet-close" aria-label="关闭车位详情">×</button>
       </div>
+      <div class="amap-spot-sheet-facts">
+        <div class="amap-spot-sheet-fact"><span>步行</span><b>${escapeHtml(spot.walk || "-")}</b></div>
+        <div class="amap-spot-sheet-fact"><span>可用</span><b>${escapeHtml(spot.count || 0)} 个</b></div>
+        <div class="amap-spot-sheet-fact"><span>距离</span><b>${escapeHtml(spot.dist || "-")}</b></div>
+      </div>
+      <div class="amap-spot-sheet-rule">${escapeHtml(spot.rule || spot.window || "点击预约后锁定车位")}</div>
+      <button type="button" class="amap-spot-sheet-cta">预约车位</button>
     `;
+    sheet.querySelector(".amap-spot-sheet-close").addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      sheet.remove();
+    });
+    sheet.querySelector(".amap-spot-sheet-cta").addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      console.log("[citypilot-amap] static sheet cta", spot.id, spot.name);
+    });
+  }
+
+  function markerContent(spot, active, onSelect) {
+    const pin = document.createElement("button");
+    pin.type = "button";
+    pin.className = "amap-parking-pin" + (active ? " active" : "");
+    pin.setAttribute("aria-label", "查看" + spot.name + "车位详情");
+    pin.innerHTML = '<div class="amap-parking-label">' + priceText(spot) + '</div><div class="amap-parking-dot"></div>';
+    pin.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      console.log("[citypilot-amap] marker DOM click", spot.id, spot.name);
+      onSelect();
+    });
+    return pin;
   }
 
   function clickSimpleSpot(spot) {
     const target = document.querySelector('[data-action="selectSpot"][data-id="' + spot.id + '"]');
-    if (target) target.click();
+    if (!target) return false;
+    target.click();
+    return true;
   }
 
   function clickBundledSpot(mapPane, spot) {
-    const candidates = Array.from(mapPane.querySelectorAll("div"))
-      .filter(el => !el.closest("[data-amap-real]"))
-      .filter(el => (el.textContent || "").includes(spot.name))
-      .filter(el => (el.getAttribute("style") || "").includes("cursor:pointer"))
-      .sort((a, b) => (a.textContent || "").length - (b.textContent || "").length);
-    if (candidates[0]) candidates[0].click();
+    const roots = [mapPane, document].filter((root, index, arr) => root && arr.indexOf(root) === index);
+    for (const root of roots) {
+      const candidates = Array.from(root.querySelectorAll("div,button,article"))
+        .filter(el => !el.closest("[data-amap-real]"))
+        .filter(el => (el.textContent || "").includes(spot.name))
+        .filter(el => {
+          const style = el.getAttribute("style") || "";
+          return style.includes("cursor:pointer")
+            || el.hasAttribute("onclick")
+            || el.getAttribute("role") === "button"
+            || el.getAttribute("data-action") === "selectSpot";
+        })
+        .sort((a, b) => (a.textContent || "").length - (b.textContent || "").length);
+      if (candidates[0]) {
+        candidates[0].click();
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function dispatchSelectSpot(spot) {
+    suppressNextMapClick = true;
+    window.dispatchEvent(new CustomEvent("citypilot:select-spot", {
+      detail: { id: spot.id, spot }
+    }));
+    window.setTimeout(() => {
+      suppressNextMapClick = false;
+    }, 150);
   }
 
   function clickSpot(mapPane, spot) {
-    clickSimpleSpot(spot);
-    clickBundledSpot(mapPane, spot);
+    console.log("[citypilot-amap] select spot from marker", spot.id, spot.name);
+    showSpotSheet(mapPane, spot);
+    dispatchSelectSpot(spot);
+    window.setTimeout(() => {
+      if (selectedSpotId() === spot.id) return;
+      if (clickSimpleSpot(spot)) return;
+      if (clickBundledSpot(mapPane, spot)) return;
+      console.log("[citypilot-amap] using static spot sheet", spot.id, spot.name);
+    }, 40);
   }
 
   function preparePane(mapPane) {
@@ -193,6 +299,10 @@
         map.addControl(new AMap.Scale());
         map.addControl(new AMap.ToolBar({ position: "RT" }));
         map.on("click", event => {
+          if (suppressNextMapClick) {
+            suppressNextMapClick = false;
+            return;
+          }
           pickedLngLat = event.lnglat;
           addPickMarker(AMap, pickedLngLat);
         });
@@ -202,12 +312,20 @@
       pickMarker = null;
       const activeId = selectedSpotId();
       const markers = list.map(spot => {
+        const select = () => clickSpot(mapPane, spot);
         const marker = new AMap.Marker({
           position: [spot.lng, spot.lat],
           anchor: "bottom-center",
-          content: markerContent(spot, activeId === spot.id)
+          content: markerContent(spot, activeId === spot.id, select)
         });
-        marker.on("click", () => clickSpot(mapPane, spot));
+        marker.on("click", event => {
+          if (event && event.originEvent) {
+            event.originEvent.preventDefault();
+            event.originEvent.stopPropagation();
+          }
+          console.log("[citypilot-amap] AMap marker click", spot.id, spot.name);
+          select();
+        });
         return marker;
       });
       if (markers.length) {
