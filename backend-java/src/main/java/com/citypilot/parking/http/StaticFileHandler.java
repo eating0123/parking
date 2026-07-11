@@ -31,7 +31,7 @@ public class StaticFileHandler implements HttpHandler {
     @Override
     public void handle(HttpExchange exchange) throws IOException {
         String rawPath = exchange.getRequestURI().getPath();
-        String path = "/".equals(rawPath) ? "/index.html" : URLDecoder.decode(rawPath, StandardCharsets.UTF_8.name());
+        String path = "/".equals(rawPath) ? "/frontend/index.html" : URLDecoder.decode(rawPath, StandardCharsets.UTF_8.name());
         Path file = root.resolve(path.substring(1)).normalize();
 
         if (!isAllowed(file) || !Files.exists(file) || Files.isDirectory(file)) {
@@ -49,6 +49,7 @@ public class StaticFileHandler implements HttpHandler {
         if ("mock-data.js".equals(relative)) return true;
         if ("deepseek.js".equals(relative)) return true;
         if ("deepseek.local.js".equals(relative)) return true;
+        if ("prototype-api-bridge.js".equals(relative)) return true;
         return relative.startsWith("frontend" + java.io.File.separator);
     }
 
