@@ -153,6 +153,7 @@ document.addEventListener('DOMContentLoaded', async function() {
     template = patchCityPilotRemoveListView(template);
     template = patchCityPilotCompactHomeHeader(template);
     template = patchCityPilotPageTitle(template);
+    template = patchCityPilotRemoveManageRows(template);
 
     const resourceScript = '<script>window.__resources = ' +
       JSON.stringify(resourceMap).replace(/<\//g, '<\\/') +
@@ -702,6 +703,7 @@ function patchCityPilotModeTabs(template) {
           </sc-for>
         </div>
       </div>
+      <sc-if value="{{ showDurationPicker }}" hint-placeholder-val="{{ true }}">
       <div style="display:flex;flex-direction:column;gap:9px">
         <span style="font-size:12px;font-weight:700;color:rgba(23,32,21,.6)">停车时长</span>
         <div style="display:flex;gap:8px">
@@ -710,6 +712,7 @@ function patchCityPilotModeTabs(template) {
           </sc-for>
         </div>
       </div>
+      </sc-if>
       <div style="background:rgba(255,255,255,.62);border-radius:12px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between">
         <span style="font-size:13px;color:rgba(23,32,21,.6)">{{ timeSummary }}</span>
         <span style="font-size:17px;font-weight:800;color:#6F9F4F">{{ estPrice }}</span>
@@ -737,6 +740,7 @@ function patchCityPilotModeTabs(template) {
     `      // time select
       stepTime: st.step === 'time',
       dateChips, durChips,
+      showDurationPicker: st.mode !== 'future',
       backDetail: () => this.setState({ step: null }),
       timeSummary: timeText,
       estPrice: '预估 ¥' + total.toFixed(1),
@@ -799,7 +803,7 @@ function patchCityPilotPhotos(template) {
             <span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:rgba(23,32,21,.4)">车位实拍照片</span>
             <sc-if value="{{ s.ev }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:8px;right:8px;font-size:10px;font-weight:700;white-space:nowrap;color:#6F9F4F;background:rgba(111,159,79,.12);border:1px solid rgba(111,159,79,.35);border-radius:5px;padding:2px 6px">⚡ 可充电</span></sc-if>
           </div>`,
-    `          <div style="height:86px;background:#DCEBD5;background-image:{{ s.photoBg }};background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden">
+    `          <div style="height:172px;background:#DCEBD5;background-image:{{ s.photoBg }};background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden">
             <sc-if value="{{ s.ev }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:8px;right:8px;font-size:10px;font-weight:700;white-space:nowrap;color:#6F9F4F;background:rgba(111,159,79,.12);border:1px solid rgba(111,159,79,.35);border-radius:5px;padding:2px 6px">⚡ 可充电</span></sc-if>
           </div>`,
     'list card real photo'
@@ -807,10 +811,21 @@ function patchCityPilotPhotos(template) {
 
   template = replaceOnce(
     template,
+    `      <div style="height:130px;border-radius:14px;background:radial-gradient(180px 90px at 25% 30%,rgba(111,159,79,.18),transparent 64%),repeating-linear-gradient(45deg,rgba(111,159,79,.09) 0 8px,rgba(255,255,255,.36) 8px 16px);display:flex;align-items:center;justify-content:center;position:relative">
+        <span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:rgba(23,32,21,.4)">车位实拍照片 · 1/3</span>
+        <sc-if value="{{ selEv }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:10px;right:10px;font-size:11px;font-weight:700;white-space:nowrap;color:#6F9F4F;background:rgba(111,159,79,.14);border:1px solid rgba(111,159,79,.4);border-radius:6px;padding:3px 8px">⚡ 支持充电 · 7kW</span></sc-if>
+      </div>
+`,
+    '',
+    'detail placeholder photo'
+  );
+
+  template = replaceOnce(
+    template,
     `      <div style="font-size:13px;color:rgba(23,32,21,.6)">{{ selAddr }}</div>
       <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">`,
     `      <div style="font-size:13px;color:rgba(23,32,21,.6)">{{ selAddr }}</div>
-      <div style="height:130px;border-radius:14px;background:#DCEBD5;background-image:{{ selPhotoBg }};background-size:cover;background-position:center;position:relative;overflow:hidden">
+      <div style="height:260px;border-radius:14px;background:#DCEBD5;background-image:{{ selPhotoBg }};background-size:cover;background-position:center;position:relative;overflow:hidden">
         <sc-if value="{{ selEv }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:10px;right:10px;font-size:10px;font-weight:700;color:#6F9F4F;background:rgba(111,159,79,.14);border:1px solid rgba(111,159,79,.35);border-radius:6px;padding:3px 7px">⚡ 可充电</span></sc-if>
       </div>
       <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">`,
@@ -937,6 +952,15 @@ function patchCityPilotPageTitle(template) {
   }
   const i = headOpen.index + headOpen[0].length;
   return template.slice(0, i) + '\n' + title + template.slice(i);
+}
+
+function patchCityPilotRemoveManageRows(template) {
+  const pattern = /    <div style="background:rgba\(255,255,255,\.72\);border:1px solid rgba\(255,255,255,\.08\);border-radius:16px;overflow:hidden">\n      <div style="padding:13px 16px;font-size:13px;font-weight:700;color:rgba\(23,32,21,\.7\);border-bottom:1px solid rgba\(23,32,21,\.06\)">车位列表<\/div>\n      <sc-for list="\{\{ manageRows \}\}" as="r" hint-placeholder-count="6">[\s\S]*?      <\/sc-for>\n    <\/div>\n/;
+  if (!pattern.test(template)) {
+    console.warn('[citypilot-manage] manageRows list block not found');
+    return template;
+  }
+  return template.replace(pattern, '');
 }
 
   </script>
